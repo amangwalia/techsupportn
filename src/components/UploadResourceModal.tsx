@@ -43,8 +43,6 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
   storageUsage: initialStorageUsage,
   onRefreshStorage
 }) => {
-  if (!isOpen) return null;
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadMode, setUploadMode] = useState<'file' | 'gdrive'>('file');
   const [dragActive, setDragActive] = useState(false);
@@ -78,6 +76,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
 
   // Fetch updated storage usage on modal mount
   useEffect(() => {
+    if (!isOpen) return;
     let mounted = true;
     const loadUsage = async () => {
       setStorageLoading(true);
@@ -96,7 +95,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isOpen]);
 
   // Format file size nicely
   const formatFileSize = (bytes: number): string => {
@@ -421,28 +420,30 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+      <div className="relative liquid-glass rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
+        <div className="px-6 py-4 border-b border-white/50 dark:border-white/10 flex items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center shadow-md">
               <Upload className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
                 Add Resource to Catalog
               </h2>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Upload files, scripts, or link directly from your Google Drive (15GB free storage)
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+            className="p-1.5 rounded-full liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

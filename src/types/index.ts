@@ -109,3 +109,13 @@ export interface StorageUsageInfo {
   limitExceeded?: boolean;
 }
 
+export type UserRole = 'admin' | 'user';
+
+export interface UserAccount {
+  username: string;
+  role: UserRole;
+  displayName: string;
+  email?: string;
+  avatarColor?: string;
+}
+

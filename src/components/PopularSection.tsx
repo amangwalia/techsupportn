@@ -61,15 +61,15 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
   };
 
   return (
-    <div className="space-y-4 mb-8">
+    <div className="space-y-3 mb-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
+          <div className="p-1.5 rounded-xl bg-rose-500/20 text-rose-500 border border-rose-400/30 backdrop-blur-xs">
             <Flame className="w-4 h-4" />
           </div>
-          <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
-            Popular Downloads
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+            Suggested & Popular
           </h2>
         </div>
 
@@ -77,10 +77,10 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => handleScroll('left')}
-            className={`p-1.5 rounded-lg border transition cursor-pointer ${
+            className={`p-2 rounded-full transition cursor-pointer flex items-center justify-center ${
               canScrollLeft
-                ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:text-blue-600'
-                : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-300 dark:text-zinc-600 border-zinc-200 dark:border-zinc-800 cursor-not-allowed opacity-50'
+                ? 'liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                : 'opacity-30 cursor-not-allowed text-slate-400'
             }`}
             title="Previous"
             aria-label="Previous"
@@ -89,10 +89,10 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
           </button>
           <button
             onClick={() => handleScroll('right')}
-            className={`p-1.5 rounded-lg border transition cursor-pointer ${
+            className={`p-2 rounded-full transition cursor-pointer flex items-center justify-center ${
               canScrollRight
-                ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:text-blue-600'
-                : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-300 dark:text-zinc-600 border-zinc-200 dark:border-zinc-800 cursor-not-allowed opacity-50'
+                ? 'liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                : 'opacity-30 cursor-not-allowed text-slate-400'
             }`}
             title="Next"
             aria-label="Next"
@@ -105,7 +105,7 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
       {/* Cards Carousel */}
       <div
         ref={scrollRef}
-        className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scroll-smooth"
+        className="flex gap-4 overflow-x-auto pb-3 scrollbar-none scroll-smooth"
       >
         {popularItems.map((item) => {
           const isDownloading = downloadingId === item.id;
@@ -114,22 +114,22 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
           return (
             <div
               key={item.id}
-              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-2xs flex flex-col justify-between shrink-0 w-[260px] sm:w-[280px]"
+              className="liquid-glass-card rounded-2xl p-4 flex flex-col justify-between shrink-0 w-[260px] sm:w-[280px] shadow-sm hover:shadow-lg transition-all duration-300"
             >
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60 font-bold">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full liquid-glass-chip text-blue-600 dark:text-cyan-400 font-medium">
                     {item.format}
                   </span>
-                  <span className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 liquid-glass-chip px-2 py-0.5 rounded-full">
                     {item.size}
                   </span>
                 </div>
 
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1 mb-1">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-1 mb-1">
                   {item.title}
                 </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-3 leading-relaxed">
+                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3 leading-relaxed">
                   {item.tagline || item.description}
                 </p>
               </div>
@@ -137,10 +137,10 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
               <button
                 onClick={() => handleDownload(item)}
                 disabled={isDownloading}
-                className={`w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`w-full py-2 px-3 rounded-full text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   isDownloaded
-                    ? 'bg-blue-800 text-white shadow-blue-800/20'
-                    : 'bg-blue-600 hover:bg-blue-700 active:scale-98 text-white shadow-blue-600/25'
+                    ? 'bg-emerald-600 text-white shadow-[0_4px_14px_rgba(16,185,129,0.35)]'
+                    : 'liquid-glass-btn text-white shadow-xs'
                 }`}
               >
                 {isDownloaded ? (
@@ -150,7 +150,7 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
                   </>
                 ) : isDownloading ? (
                   <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     <span>Downloading...</span>
                   </>
                 ) : (
@@ -167,3 +167,4 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
     </div>
   );
 };
+

@@ -36,8 +36,6 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
   isSaved,
   onToggleSave
 }) => {
-  if (!item) return null;
-
   const [activeTab, setActiveTab] = useState<'code' | 'install' | 'changelog' | 'verify'>('code');
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [downloading, setDownloading] = useState(false);
@@ -50,6 +48,8 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
   const [testInput, setTestInput] = useState('');
   const [calculatedHash, setCalculatedHash] = useState('');
   const [verifyStatus, setVerifyStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
+
+  if (!item) return null;
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -98,37 +98,37 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
   const currentContent = currentFile ? currentFile.content : item.rawContent || '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/70 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-md overflow-y-auto">
       <div 
-        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="liquid-glass rounded-3xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-white/60 dark:border-white/15"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="p-5 sm:p-6 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-5 sm:p-6 border-b border-white/50 dark:border-white/10 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-2xl">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
+              <span className="px-3 py-0.5 rounded-full text-xs font-mono font-bold liquid-glass-chip text-blue-600 dark:text-cyan-400">
                 {item.format}
               </span>
-              <span className="text-xs font-mono text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
+              <span className="text-xs font-mono text-slate-600 dark:text-slate-300 liquid-glass-chip px-2.5 py-0.5 rounded-full">
                 {item.size}
               </span>
-              <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-850 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
+              <span className="text-xs font-mono text-slate-500 dark:text-slate-400 liquid-glass-chip px-2.5 py-0.5 rounded-full">
                 v{item.version}
               </span>
-              <span className="text-xs text-zinc-400 dark:text-zinc-500">
+              <span className="text-xs text-slate-400 dark:text-slate-500">
                 Updated {item.updatedDate}
               </span>
-              <div className="flex items-center gap-1 text-blue-700 dark:text-blue-400 text-xs font-semibold ml-2">
-                <ShieldCheck className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1 text-cyan-600 dark:text-cyan-400 text-xs font-bold ml-2">
+                <ShieldCheck className="w-4 h-4" />
                 <span>Verified</span>
               </div>
             </div>
 
-            <h2 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
               {item.title}
             </h2>
-            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-350 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               {item.tagline || item.description}
             </p>
           </div>
@@ -137,19 +137,19 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
           <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
             <button
               onClick={() => onToggleSave(item)}
-              className={`p-2 rounded-lg border transition cursor-pointer ${
+              className={`p-2.5 rounded-2xl liquid-glass-chip transition cursor-pointer ${
                 isSaved
-                  ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-800'
-                  : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                  ? 'bg-blue-500/20 text-blue-600 dark:text-cyan-400 border-blue-400/40'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
               title={isSaved ? 'Remove from My Vault' : 'Save to My Vault'}
             >
-              {isSaved ? <BookmarkCheck className="w-5 h-5 fill-blue-100 dark:fill-blue-950 text-blue-600" /> : <Bookmark className="w-5 h-5" />}
+              {isSaved ? <BookmarkCheck className="w-5 h-5 fill-blue-500/30 text-blue-600 dark:text-cyan-400" /> : <Bookmark className="w-5 h-5" />}
             </button>
 
             <button
               onClick={onClose}
-              className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 transition cursor-pointer"
+              className="p-2.5 rounded-2xl liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -157,15 +157,15 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
         </div>
 
         {/* 1-Click Action & Meta Banner */}
-        <div className="bg-blue-50/50 dark:bg-blue-950/30 px-5 sm:px-6 py-3.5 border-b border-blue-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-white/30 dark:bg-slate-900/30 px-5 sm:px-6 py-3.5 border-b border-white/40 dark:border-white/10 flex flex-wrap items-center justify-between gap-3 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className={`py-2 px-4 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
+              className={`py-2.5 px-5 rounded-full text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer shadow-md ${
                 downloaded
-                  ? 'bg-blue-800 text-white shadow-sm shadow-blue-800/20'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-600/25 active:scale-95'
+                  ? 'bg-emerald-600 text-white shadow-[0_4px_14px_rgba(16,185,129,0.35)]'
+                  : 'liquid-glass-btn text-white'
               }`}
             >
               {downloaded ? (
@@ -191,10 +191,10 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
                 href={item.sourceUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="py-2 px-3 rounded-lg text-xs font-medium bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 transition shadow-2xs"
+                className="py-2.5 px-3.5 rounded-full text-xs font-semibold liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition"
               >
                 <span>GitHub Source</span>
-                <ExternalLink className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
               </a>
             )}
 
@@ -203,31 +203,31 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
                 href={item.officialDownloadUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="py-2 px-3 rounded-lg text-xs font-medium bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-750 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/80 flex items-center gap-1.5 transition shadow-2xs"
+                className="py-2.5 px-3.5 rounded-full text-xs font-semibold liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 text-blue-600 dark:text-cyan-400 flex items-center gap-1.5 transition"
               >
                 <span>Official Release</span>
-                <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
+                <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
               </a>
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span>OS:</span>
-            <span className="text-zinc-800 dark:text-zinc-200 font-semibold">{item.os.join(', ')}</span>
-            <span className="text-zinc-300 dark:text-zinc-700">|</span>
+            <span className="text-slate-800 dark:text-slate-200 font-bold">{item.os.join(', ')}</span>
+            <span className="text-slate-300 dark:text-slate-700">|</span>
             <span>License:</span>
-            <span className="text-zinc-800 dark:text-zinc-200 font-semibold">{item.license}</span>
+            <span className="text-slate-800 dark:text-slate-200 font-bold">{item.license}</span>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center px-5 sm:px-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/70 text-xs sm:text-sm">
+        <div className="flex items-center px-5 sm:px-6 border-b border-white/40 dark:border-white/10 bg-white/20 dark:bg-slate-950/40 text-xs sm:text-sm backdrop-blur-md">
           <button
             onClick={() => setActiveTab('code')}
-            className={`py-3 px-4 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 font-bold border-b-2 transition cursor-pointer flex items-center gap-2 ${
               activeTab === 'code'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
-                : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                ? 'border-cyan-500 text-blue-600 dark:text-cyan-400 bg-white/40 dark:bg-slate-900/50'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Code2 className="w-4 h-4" />
@@ -237,10 +237,10 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
           {item.cheatSheetSections && (
             <button
               onClick={() => setActiveTab('code')}
-              className={`py-3 px-4 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              className={`py-3 px-4 font-bold border-b-2 transition cursor-pointer flex items-center gap-2 ${
                 activeTab === 'code'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
-                  : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                  ? 'border-cyan-500 text-blue-600 dark:text-cyan-400 bg-white/40 dark:bg-slate-900/50'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <FileText className="w-4 h-4" />
@@ -250,10 +250,10 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
 
           <button
             onClick={() => setActiveTab('install')}
-            className={`py-3 px-4 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 font-bold border-b-2 transition cursor-pointer flex items-center gap-2 ${
               activeTab === 'install'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
-                : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                ? 'border-cyan-500 text-blue-600 dark:text-cyan-400 bg-white/40 dark:bg-slate-900/50'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Terminal className="w-4 h-4" />
@@ -262,10 +262,10 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
 
           <button
             onClick={() => setActiveTab('verify')}
-            className={`py-3 px-4 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 font-bold border-b-2 transition cursor-pointer flex items-center gap-2 ${
               activeTab === 'verify'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
-                : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                ? 'border-cyan-500 text-blue-600 dark:text-cyan-400 bg-white/40 dark:bg-slate-900/50'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
@@ -275,10 +275,10 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
           {item.changelog && item.changelog.length > 0 && (
             <button
               onClick={() => setActiveTab('changelog')}
-              className={`py-3 px-4 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              className={`py-3 px-4 font-bold border-b-2 transition cursor-pointer flex items-center gap-2 ${
                 activeTab === 'changelog'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
-                  : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                  ? 'border-cyan-500 text-blue-600 dark:text-cyan-400 bg-white/40 dark:bg-slate-900/50'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <History className="w-4 h-4" />
@@ -288,7 +288,7 @@ export const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
         </div>
 
         {/* Tab Content Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto max-h-[55vh] space-y-6 bg-white dark:bg-zinc-900">
+        <div className="p-5 sm:p-6 overflow-y-auto max-h-[55vh] space-y-6">
           {/* TAB 1: CODE / FILES / CHEATSHEET */}
           {activeTab === 'code' && (
             <div className="space-y-4">

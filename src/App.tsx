@@ -13,9 +13,13 @@ import {
   CheckCircle2,
   FolderPlus,
   Cpu,
-  Film
+  Film,
+  ShieldCheck,
+  Lock,
+  HardDrive,
+  Info
 } from 'lucide-react';
-import { ResourceItem, StorageUsageInfo } from './types';
+import { ResourceItem, StorageUsageInfo, UserRole } from './types';
 import { RESOURCES_DATA, CATEGORIES_CONFIG } from './data/resources';
 import { Header } from './components/Header';
 import { HeroSearch } from './components/HeroSearch';
@@ -23,41 +27,40 @@ import { PopularSection } from './components/PopularSection';
 import { ResourceCard } from './components/ResourceCard';
 import { MyVaultDrawer } from './components/MyVaultDrawer';
 import { UploadResourceModal } from './components/UploadResourceModal';
+import { AdminUserManagementModal } from './components/AdminUserManagementModal';
 import { LoginPage } from './components/LoginPage';
 import { TechSupportLogo } from './components/TechSupportLogo';
 import { getUserUploadedResources, deleteUserUploadedResource, fetchStorageUsage } from './utils/storage';
+import { getCurrentSession, logoutUser } from './utils/auth';
 
 export default function App() {
-  // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem('level1_authenticated') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Authentication & Role State
+  const [session, setSession] = useState<{
+    isAuthenticated: boolean;
+    username: string;
+    role: UserRole;
+  }>(() => getCurrentSession());
 
-  const [currentUsername, setCurrentUsername] = useState<string>(() => {
-    try {
-      return sessionStorage.getItem('level1_auth_current_user') || 'admin';
-    } catch {
-      return 'admin';
-    }
-  });
+  const isAuthenticated = session.isAuthenticated;
+  const currentUsername = session.username;
+  const userRole = session.role;
+  const isAdmin = userRole === 'admin';
 
-  const handleLoginSuccess = (user: string) => {
-    setCurrentUsername(user);
-    setIsAuthenticated(true);
+  const handleLoginSuccess = (user: string, role: UserRole) => {
+    setSession({
+      isAuthenticated: true,
+      username: user,
+      role
+    });
   };
 
   const handleLogout = () => {
-    try {
-      sessionStorage.removeItem('level1_authenticated');
-      sessionStorage.removeItem('level1_auth_current_user');
-    } catch (e) {
-      console.error(e);
-    }
-    setIsAuthenticated(false);
+    logoutUser();
+    setSession({
+      isAuthenticated: false,
+      username: 'user',
+      role: 'user'
+    });
   };
 
   // Dark Mode State
@@ -92,6 +95,7 @@ export default function App() {
   // Modals & Drawers
   const [isMyVaultOpen, setIsMyVaultOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isAdminManagementOpen, setIsAdminManagementOpen] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [isGlobalDragging, setIsGlobalDragging] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -130,6 +134,11 @@ export default function App() {
       dragCounter = 0;
 
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        if (!isAdmin) {
+          setToastMessage('Uploads are restricted to Administrators. Log in as Admin to publish files.');
+          setTimeout(() => setToastMessage(null), 3500);
+          return;
+        }
         const file = e.dataTransfer.files[0];
         setDroppedFile(file);
         setIsUploadModalOpen(true);
@@ -147,7 +156,7 @@ export default function App() {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, []);
+  }, [isAdmin]);
 
   // User-uploaded custom resources stored in Central Server Storage
   const [userResources, setUserResources] = useState<ResourceItem[]>([]);
@@ -335,92 +344,133 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans selection:bg-blue-500/20 selection:text-blue-900 dark:selection:text-blue-200">
+    <div className="relative min-h-screen bg-slate-50/90 dark:bg-[#090d16] text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-blue-500/25 selection:text-blue-900 dark:selection:text-blue-200 overflow-x-hidden transition-colors duration-300">
+      
+      {/* Background Liquid Caustics & Floating Glass Orbs */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        {/* Luminous Azure Orb */}
+        <div className="absolute -top-24 -left-20 w-[550px] h-[550px] rounded-full bg-gradient-to-tr from-blue-400/25 via-cyan-400/20 to-indigo-500/15 dark:from-blue-600/20 dark:via-cyan-500/15 dark:to-indigo-600/15 blur-[110px] animate-liquid-1" />
+        
+        {/* Iridescent Violet-Indigo Orb */}
+        <div className="absolute top-1/3 -right-28 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-indigo-400/20 via-purple-400/20 to-blue-500/15 dark:from-indigo-600/20 dark:via-purple-700/15 dark:to-cyan-500/10 blur-[130px] animate-liquid-2" />
+        
+        {/* Soft Aquatic Cyan Orb at bottom */}
+        <div className="absolute -bottom-32 left-1/4 w-[650px] h-[650px] rounded-full bg-gradient-to-t from-cyan-400/20 via-teal-300/15 to-blue-400/10 dark:from-cyan-700/15 dark:via-teal-800/10 dark:to-blue-600/10 blur-[120px] animate-liquid-3" />
+        
+        {/* Ambient Subtle Grid Shimmer */}
+        <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.4)_1px,transparent_1px)] dark:bg-[radial-gradient(rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:32px_32px] opacity-60" />
+      </div>
+
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl shadow-xl border border-zinc-750 dark:border-zinc-300 text-xs sm:text-sm font-semibold animate-in slide-in-from-top-4 duration-200">
-          <CheckCircle2 className="w-4 h-4 text-blue-400 dark:text-blue-600" />
+        <div className="fixed top-20 right-5 z-50 flex items-center gap-2.5 px-5 py-3.5 bg-slate-900/85 dark:bg-slate-900/90 text-white rounded-full shadow-2xl backdrop-blur-xl border border-white/20 text-xs sm:text-sm font-medium animate-in slide-in-from-top-4 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-cyan-400" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Top Application Header */}
-      <Header
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        showQuickSearch={showQuickSearch}
-        onOpenMyVault={() => setIsMyVaultOpen(true)}
-        onOpenUploadModal={() => setIsUploadModalOpen(true)}
-        savedCount={savedIds.length}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
-        currentUser={currentUsername}
-        onLogout={handleLogout}
-        storageUsage={storageUsage}
-      />
+      <div className="relative z-40">
+        <Header
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          showQuickSearch={showQuickSearch}
+          onOpenMyVault={() => setIsMyVaultOpen(true)}
+          onOpenUploadModal={() => {
+            if (isAdmin) {
+              setIsUploadModalOpen(true);
+            } else {
+              setToastMessage('Uploads are reserved for Administrators. Switch to Admin account to upload.');
+              setTimeout(() => setToastMessage(null), 3500);
+            }
+          }}
+          onOpenAdminManagement={() => setIsAdminManagementOpen(true)}
+          savedCount={savedIds.length}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
+          currentUser={currentUsername}
+          userRole={userRole}
+          onLogout={handleLogout}
+          storageUsage={storageUsage}
+        />
+      </div>
 
       {/* Main Hero & Search Engine */}
-      <HeroSearch
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        selectedCategory={selectedCategory}
-        onCategorySelect={setSelectedCategory}
-        totalResults={filteredResources.length}
-      />
+      <div className="relative z-10">
+        <HeroSearch
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedCategory={selectedCategory}
+          onCategorySelect={setSelectedCategory}
+          totalResults={filteredResources.length}
+        />
+      </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
-        {/* Direct Upload Quick Banner with Live 4GB Storage Indicator */}
-        <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-transparent dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-zinc-900 border border-blue-200/80 dark:border-blue-900/50 rounded-2xl p-5 sm:p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 shadow-xs">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0 mt-1 sm:mt-0">
-              <Upload className="w-6 h-6" />
+        {/* Direct Upload / Storage Action Banner - Liquid Glass Surface */}
+        <div className="liquid-glass rounded-3xl p-6 sm:p-7 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 transition-all duration-300">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/25 to-cyan-500/20 text-blue-600 dark:text-cyan-300 border border-white/60 dark:border-white/15 flex items-center justify-center shrink-0 shadow-inner mt-1 sm:mt-0 backdrop-blur-md">
+              {isAdmin ? <Upload className="w-5 h-5" /> : <Download className="w-5 h-5" />}
             </div>
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                  Direct Upload & Community Cloud
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50 tracking-tight">
+                  {isAdmin ? 'Administrator Central Hub' : 'Resource Catalog & Download Center'}
                 </h3>
-                <span className="text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                  Live Shared Cloud
+                <span className="text-[11px] font-medium px-3 py-0.5 rounded-full bg-blue-500/10 dark:bg-blue-400/15 text-blue-700 dark:text-cyan-300 border border-blue-300/40 dark:border-blue-400/20 flex items-center gap-1.5 backdrop-blur-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                  {isAdmin ? 'Admin Console' : 'Member Access'}
                 </span>
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 max-w-2xl">
-                Directly publish apps, .exe files, batch scripts, media, videos, images, or documents — automatically stored up to your 4 GB cloud capacity and downloadable in real-time.
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                {isAdmin
+                  ? 'Upload and publish standalone apps, .exe files, batch scripts, media, or archives into your 4 GB cloud repository with instant verification.'
+                  : 'Fast, secure downloads for technical support tools, batch automation scripts, executables, and media files.'}
               </p>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto shrink-0">
-            {/* Storage capacity info mini card */}
-            <div className="px-3.5 py-2 rounded-xl bg-white/80 dark:bg-zinc-900/80 border border-blue-200/80 dark:border-blue-800/40 shadow-2xs flex flex-col justify-center min-w-[170px]">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
-                <span>Storage Left:</span>
-                <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">
-                  {storageUsage ? storageUsage.formattedRemaining : '4.00 GB'}
+            {/* Storage capacity info glass card */}
+            <div className="px-4 py-2.5 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-white/70 dark:border-white/10 shadow-xs flex flex-col justify-center min-w-[180px] backdrop-blur-md">
+              <div className="flex items-center justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                <span>Cloud Storage:</span>
+                <span className="font-semibold text-blue-600 dark:text-cyan-400 font-mono">
+                  {storageUsage ? storageUsage.formattedRemaining : '4.00 GB'} left
                 </span>
               </div>
-              <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-750 rounded-full mt-1.5 overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-200/70 dark:bg-slate-700/60 rounded-full mt-2 overflow-hidden shadow-inner">
                 <div 
-                  className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                  className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-300"
                   style={{ width: `${Math.max(4, storageUsage ? storageUsage.usedPercentage : 0)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[9px] text-zinc-400 dark:text-zinc-500 mt-1 font-mono">
+              <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 font-mono">
                 <span>Used: {storageUsage ? storageUsage.formattedUsed : '0 B'}</span>
                 <span>Max: 4.00 GB</span>
               </div>
             </div>
 
-            <button
-              onClick={() => setIsUploadModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white text-xs sm:text-sm font-bold shadow-md shadow-blue-600/25 transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Upload File / App</span>
-            </button>
+            {isAdmin ? (
+              <button
+                onClick={() => setIsUploadModalOpen(true)}
+                className="liquid-glass-btn px-6 py-2.5 rounded-full text-white text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Upload Resource</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsMyVaultOpen(true)}
+                className="liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 px-5 py-2.5 rounded-full text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-medium transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4 text-blue-500 dark:text-cyan-400" />
+                <span>Saved List ({savedIds.length})</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -434,123 +484,104 @@ export default function App() {
         {/* Resource Catalog Grid */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
-                {selectedCategory === 'all' ? 'All Developer Resources' : CATEGORIES_CONFIG.find(c => c.id === selectedCategory)?.label || 'Resources'}
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+                {selectedCategory === 'all' ? 'All Resources' : CATEGORIES_CONFIG.find(c => c.id === selectedCategory)?.label || 'Resources'}
               </h2>
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
-                {filteredResources.length} items
+              <span className="text-xs font-mono font-medium px-2.5 py-0.5 rounded-full liquid-glass-chip text-slate-600 dark:text-slate-300">
+                {filteredResources.length}
               </span>
             </div>
 
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold cursor-pointer"
+                className="text-xs text-blue-600 dark:text-cyan-400 hover:underline font-medium cursor-pointer"
               >
-                Clear search query
+                Clear search
               </button>
             )}
           </div>
 
           {filteredResources.length === 0 ? (
-            <div className="text-center py-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-4 shadow-2xs">
-              <Search className="w-12 h-12 text-zinc-400 dark:text-zinc-600 mx-auto" />
+            <div className="text-center py-20 liquid-glass rounded-3xl p-8 space-y-4">
+              <Search className="w-10 h-10 text-slate-400 dark:text-slate-500 mx-auto opacity-70" />
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
                   {searchQuery ? 'No resources matched your search' : 'No files in this category yet'}
                 </h3>
-                <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                   {searchQuery 
-                    ? 'Try searching for FixShutdown, Camera Fix, or FIX_REPOSITORY.'
-                    : 'Click "Upload New File / App" to add files, apps, or media directly to this category.'}
+                    ? 'Try searching by file name, format (exe, video, seb), or tags.'
+                    : isAdmin 
+                      ? 'Click "Upload Resource" above to add files to this category.'
+                      : 'No items currently in this category.'}
                 </p>
               </div>
               <div className="flex items-center justify-center gap-3">
-                <button
-                  onClick={() => setIsUploadModalOpen(true)}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Upload To This Category</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsUploadModalOpen(true)}
+                    className="liquid-glass-btn px-5 py-2 rounded-full text-white text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Upload To This Category</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setSearchQuery('');
                     setSelectedCategory('all');
                   }}
-                  className="px-4 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-semibold transition cursor-pointer"
+                  className="liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 px-5 py-2 rounded-full text-slate-700 dark:text-slate-200 text-xs font-medium transition cursor-pointer"
                 >
                   Show All Resources
                 </button>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredResources.map((item) => (
                 <ResourceCard
                   key={item.id}
                   item={item}
                   isSaved={savedIds.includes(item.id)}
                   onToggleSave={handleToggleSave}
-                  onDelete={item.isUserUploaded ? handleDeleteResource : undefined}
+                  onDelete={isAdmin && item.isUserUploaded ? handleDeleteResource : undefined}
                 />
               ))}
             </div>
           )}
         </section>
-
-        {/* Feature Highlights Banner */}
-        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 mt-12 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-2xs">
-          <div className="space-y-2">
-            <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60 flex items-center justify-center">
-              <Download className="w-4 h-4" />
-            </div>
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Zero Bloat • 1-Click Downloads</h3>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-normal">
-              Direct standalone file downloads with clean defaults. No accounts, ads, or paywalls.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Verified & Curated Scripts</h3>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-normal">
-              Tested automation scripts and developer utilities built for fast troubleshooting and diagnostics.
-            </p>
-          </div>
-        </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-10 mt-16 text-xs text-zinc-500 dark:text-zinc-400">
+      {/* Footer - Frosted Glass */}
+      <footer className="relative z-10 border-t border-white/40 dark:border-white/10 bg-white/40 dark:bg-slate-950/40 backdrop-blur-xl py-8 mt-16 text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <TechSupportLogo size="sm" />
-            <span className="text-zinc-700 dark:text-zinc-300 font-semibold">Tech Support — Open Technical Resource & Tool Hub</span>
+            <span className="text-slate-700 dark:text-slate-300 font-medium">Tech Support Vault</span>
           </div>
 
-          <div className="flex items-center gap-4 text-zinc-600 dark:text-zinc-400 font-medium">
-            <span>Free & Open Source</span>
+          <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400">
+            <span>Fast & Secure</span>
             <span>•</span>
-            <span>Zero Tracking</span>
+            <span>Direct Downloads</span>
           </div>
         </div>
       </footer>
 
-      {/* Full-Page Drag & Drop Overlay */}
+      {/* Full-Page Drag & Drop Overlay - Liquid Ripple Glass */}
       {isGlobalDragging && (
-        <div className="fixed inset-0 z-50 bg-blue-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200 pointer-events-none">
-          <div className="w-24 h-24 rounded-3xl bg-blue-500/20 border-2 border-dashed border-blue-400 text-blue-400 flex items-center justify-center mb-6 shadow-2xl animate-bounce">
-            <Upload className="w-12 h-12" />
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200 pointer-events-none">
+          <div className="w-24 h-24 rounded-3xl bg-blue-500/20 border-2 border-dashed border-cyan-400 text-cyan-300 flex items-center justify-center mb-5 animate-pulse shadow-[0_0_50px_rgba(6,182,212,0.3)]">
+            <Upload className="w-10 h-10" />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">
-            Drop file anywhere to upload
+          <h2 className="text-2xl font-bold text-white mb-1 tracking-tight">
+            Drop file to upload
           </h2>
-          <p className="text-sm text-blue-200/90 max-w-md">
-            Automatically parses your executable, batch script, zip archive, or asset and prepares it for the catalog.
+          <p className="text-xs text-cyan-200/80 max-w-sm">
+            Executables, videos, batch scripts, SEB files, or archives automatically stored to your vault.
           </p>
         </div>
       )}
@@ -576,6 +607,23 @@ export default function App() {
         onRemoveItem={(id) => setSavedIds(savedIds.filter((i) => i !== id))}
         onClearAll={handleClearSaved}
       />
+
+      {/* Admin User & Password Management Control Center (Admin Only) */}
+      {isAdmin && (
+        <AdminUserManagementModal
+          isOpen={isAdminManagementOpen}
+          onClose={() => setIsAdminManagementOpen(false)}
+          currentAdminUsername={currentUsername}
+          onAdminProfileUpdated={(newUsername) => {
+            setSession((prev) => ({
+              ...prev,
+              username: newUsername
+            }));
+            setToastMessage(`Admin ID updated to "${newUsername}".`);
+            setTimeout(() => setToastMessage(null), 4000);
+          }}
+        />
+      )}
     </div>
   );
 }

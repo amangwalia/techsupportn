@@ -219,118 +219,12 @@ pause`,
     changelog: [
       { version: '1.0.0', date: 'Aug 2026', notes: ['Stops and restarts winmgmt', 'Verifies and resets WMI repository', 'Runs SFC integrity scan'] }
     ]
-  },
-  {
-    id: 'bat-clean-temp-windows',
-    title: 'Clean (Visible Temp Cleanup)',
-    tagline: 'Deep cleanup of Windows Temp, User Temp, and Prefetch with live execution log',
-    description: 'Comprehensive system cleanup and disk space optimization batch script. Checks for administrator elevation, cleans and purges C:\\Windows\\Temp, clears %TEMP%, purges the Windows Prefetch directory, and displays all actions in real time.',
-    category: 'bat-files',
-    os: ['Windows'],
-    format: 'BAT',
-    size: '1.4 KB',
-    version: '1.0.0',
-    updatedDate: 'Aug 2026',
-    sha256: 'bda82d144370b4c19f4e4b8fcaf3c109c9f3e591bac9157e808a99b97083ab4b',
-    popular: true,
-    recentlyAdded: true,
-    downloadCount: 1,
-    license: 'MIT',
-    author: 'Level 1',
-    tags: ['BAT', 'Windows', 'Clean', 'Temp Cleanup', 'Prefetch', 'Optimization', 'Disk Space'],
-    fileName: 'clean.bat',
-    installCommand: 'clean.bat',
-    installGuide: [
-      'Download clean.bat.',
-      'Right-click the file and select "Run as administrator".',
-      'The script will clean system temp, user temp, and prefetch cache with live logs.'
-    ],
-    rawContent: `@echo off
-title Visible Temp Cleanup (Debug Mode)
-color 0E
-
-echo =========================================
-echo   TEMP CLEANUP - SHOWING ALL ACTIONS
-echo =========================================
-echo.
-
-:: Admin check
-net session
-if %errorlevel% neq 0 (
-    echo.
-    echo ERROR: Not running as Administrator!
-    echo.
-    pause
-    exit /b
-)
-
-:: -------------------------------
-:: Windows Temp
-:: -------------------------------
-echo.
-echo ===== Cleaning C:\\Windows\\Temp =====
-echo.
-
-dir "C:\\Windows\\Temp"
-
-echo.
-echo Deleting files...
-del /f /s /q "C:\\Windows\\Temp\\*"
-
-echo.
-echo Removing folders...
-for /d %%D in ("C:\\Windows\\Temp\\*") do (
-    echo Deleting folder: %%D
-    rd /s /q "%%D"
-)
-
-:: -------------------------------
-:: User Temp
-:: -------------------------------
-echo.
-echo ===== Cleaning %TEMP% =====
-echo.
-
-dir "%TEMP%"
-
-echo.
-echo Deleting files...
-del /f /s /q "%TEMP%\\*"
-
-echo.
-echo Removing folders...
-for /d %%D in ("%TEMP%\\*") do (
-    echo Deleting folder: %%D
-    rd /s /q "%%D"
-)
-
-:: -------------------------------
-:: Prefetch
-:: -------------------------------
-echo.
-echo ===== Cleaning Prefetch =====
-echo.
-
-dir "%SystemRoot%\\Prefetch"
-
-echo.
-echo Deleting files...
-del /f /q "%SystemRoot%\\Prefetch\\*"
-
-echo.
-echo =========================================
-echo   CLEANUP FINISHED - REVIEW ABOVE OUTPUT
-echo =========================================
-pause`,
-    changelog: [
-      { version: '1.0.0', date: 'Aug 2026', notes: ['Added admin privileges validation', 'C:\\Windows\\Temp & %TEMP% cleanup', 'Prefetch directory purge'] }
-    ]
   }
 ];
 
 export const CATEGORIES_CONFIG = [
-  { id: 'all', label: 'All Resources', icon: 'Sparkles', count: 4 },
-  { id: 'bat-files', label: '⚡ BAT & Scripts', icon: 'Terminal', count: 4 },
+  { id: 'all', label: 'All Resources', icon: 'Sparkles', count: 3 },
+  { id: 'bat-files', label: '⚡ BAT & Scripts', icon: 'Terminal', count: 3 },
   { id: 'apps', label: '🚀 Apps & EXEs', icon: 'Cpu', count: 0 },
   { id: 'media', label: '🎬 Media & Videos', icon: 'Film', count: 0 },
   { id: 'seb-files', label: '🛡️ SEB Files', icon: 'ShieldCheck', count: 0 },
