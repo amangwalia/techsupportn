@@ -15,7 +15,7 @@ import {
   Cpu,
   Film
 } from 'lucide-react';
-import { ResourceItem } from './types';
+import { ResourceItem, StorageUsageInfo } from './types';
 import { RESOURCES_DATA, CATEGORIES_CONFIG } from './data/resources';
 import { Header } from './components/Header';
 import { HeroSearch } from './components/HeroSearch';
@@ -25,7 +25,7 @@ import { MyVaultDrawer } from './components/MyVaultDrawer';
 import { UploadResourceModal } from './components/UploadResourceModal';
 import { LoginPage } from './components/LoginPage';
 import { TechSupportLogo } from './components/TechSupportLogo';
-import { getUserUploadedResources, deleteUserUploadedResource } from './utils/storage';
+import { getUserUploadedResources, deleteUserUploadedResource, fetchStorageUsage } from './utils/storage';
 
 export default function App() {
   // Authentication State
@@ -152,6 +152,16 @@ export default function App() {
   // User-uploaded custom resources stored in Central Server Storage
   const [userResources, setUserResources] = useState<ResourceItem[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
+
+  const refreshStorage = async () => {
+    try {
+      const usage = await fetchStorageUsage();
+      setStorageUsage(usage);
+    } catch (e) {
+      console.warn('Failed to refresh storage usage:', e);
+    }
+  };
 
   // Load community & user resources from central server storage on startup & interval
   useEffect(() => {
@@ -160,9 +170,13 @@ export default function App() {
     const loadStoredResources = async (silent = false) => {
       if (!silent) setIsSyncing(true);
       try {
-        const stored = await getUserUploadedResources();
+        const [stored, usage] = await Promise.all([
+          getUserUploadedResources(),
+          fetchStorageUsage()
+        ]);
         if (isMounted) {
           setUserResources(stored);
+          setStorageUsage(usage);
         }
       } catch (err) {
         console.error('Failed to load user resources:', err);
@@ -261,6 +275,7 @@ export default function App() {
   const handleResourcePublished = (newResource: ResourceItem) => {
     setUserResources((prev) => [newResource, ...prev]);
     setSelectedCategory('all');
+    refreshStorage();
     setToastMessage(`"${newResource.title}" uploaded & added to catalog!`);
     setTimeout(() => setToastMessage(null), 4000);
   };
@@ -271,6 +286,7 @@ export default function App() {
     if (success) {
       setUserResources((prev) => prev.filter((item) => item.id !== id));
       setSavedIds((prev) => prev.filter((itemId) => itemId !== id));
+      refreshStorage();
       setToastMessage('Resource removed from catalog.');
       setTimeout(() => setToastMessage(null), 3000);
     }
@@ -319,11 +335,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-900 dark:selection:text-emerald-200">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans selection:bg-blue-500/20 selection:text-blue-900 dark:selection:text-blue-200">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl shadow-xl border border-zinc-750 dark:border-zinc-300 text-xs sm:text-sm font-semibold animate-in slide-in-from-top-4 duration-200">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
+          <CheckCircle2 className="w-4 h-4 text-blue-400 dark:text-blue-600" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -340,6 +356,7 @@ export default function App() {
         onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
         currentUser={currentUsername}
         onLogout={handleLogout}
+        storageUsage={storageUsage}
       />
 
       {/* Main Hero & Search Engine */}
@@ -354,35 +371,57 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
         
-        {/* Direct Upload Quick Banner */}
-        <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent dark:from-emerald-950/40 dark:via-teal-950/20 dark:to-zinc-900 border border-emerald-200/80 dark:border-emerald-900/50 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+        {/* Direct Upload Quick Banner with Live 4GB Storage Indicator */}
+        <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-transparent dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-zinc-900 border border-blue-200/80 dark:border-blue-900/50 rounded-2xl p-5 sm:p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0 mt-1 sm:mt-0">
               <Upload className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                  Direct Upload Section
+                  Direct Upload & Community Cloud
                 </h3>
-                <span className="text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
                   Live Shared Cloud
                 </span>
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                Directly publish apps, .exe files, batch scripts, media, videos, images, or documents — automatically visible and downloadable to all users in real-time.
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 max-w-2xl">
+                Directly publish apps, .exe files, batch scripts, media, videos, images, or documents — automatically stored up to your 4 GB cloud capacity and downloadable in real-time.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={() => setIsUploadModalOpen(true)}
-            className="shrink-0 w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-600/25 transition cursor-pointer flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Upload New File / App</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto shrink-0">
+            {/* Storage capacity info mini card */}
+            <div className="px-3.5 py-2 rounded-xl bg-white/80 dark:bg-zinc-900/80 border border-blue-200/80 dark:border-blue-800/40 shadow-2xs flex flex-col justify-center min-w-[170px]">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                <span>Storage Left:</span>
+                <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">
+                  {storageUsage ? storageUsage.formattedRemaining : '4.00 GB'}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-750 rounded-full mt-1.5 overflow-hidden">
+                <div 
+                  className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.max(4, storageUsage ? storageUsage.usedPercentage : 0)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[9px] text-zinc-400 dark:text-zinc-500 mt-1 font-mono">
+                <span>Used: {storageUsage ? storageUsage.formattedUsed : '0 B'}</span>
+                <span>Max: 4.00 GB</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsUploadModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white text-xs sm:text-sm font-bold shadow-md shadow-blue-600/25 transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Upload File / App</span>
+            </button>
+          </div>
         </div>
 
         {/* If no search query and on 'all' tab, show Popular Downloads */}
@@ -399,7 +438,7 @@ export default function App() {
               <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
                 {selectedCategory === 'all' ? 'All Developer Resources' : CATEGORIES_CONFIG.find(c => c.id === selectedCategory)?.label || 'Resources'}
               </h2>
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
                 {filteredResources.length} items
               </span>
             </div>
@@ -407,7 +446,7 @@ export default function App() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-semibold cursor-pointer"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold cursor-pointer"
               >
                 Clear search query
               </button>
@@ -430,7 +469,7 @@ export default function App() {
               <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer flex items-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Upload To This Category</span>
@@ -464,7 +503,7 @@ export default function App() {
         {/* Feature Highlights Banner */}
         <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 mt-12 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-2xs">
           <div className="space-y-2">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60 flex items-center justify-center">
               <Download className="w-4 h-4" />
             </div>
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Zero Bloat • 1-Click Downloads</h3>
@@ -474,7 +513,7 @@ export default function App() {
           </div>
 
           <div className="space-y-2">
-            <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800/60 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-center">
               <Sparkles className="w-4 h-4" />
             </div>
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Verified & Curated Scripts</h3>
@@ -503,14 +542,14 @@ export default function App() {
 
       {/* Full-Page Drag & Drop Overlay */}
       {isGlobalDragging && (
-        <div className="fixed inset-0 z-50 bg-emerald-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200 pointer-events-none">
-          <div className="w-24 h-24 rounded-3xl bg-emerald-500/20 border-2 border-dashed border-emerald-400 text-emerald-400 flex items-center justify-center mb-6 shadow-2xl animate-bounce">
+        <div className="fixed inset-0 z-50 bg-blue-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200 pointer-events-none">
+          <div className="w-24 h-24 rounded-3xl bg-blue-500/20 border-2 border-dashed border-blue-400 text-blue-400 flex items-center justify-center mb-6 shadow-2xl animate-bounce">
             <Upload className="w-12 h-12" />
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">
             Drop file anywhere to upload
           </h2>
-          <p className="text-sm text-emerald-200/90 max-w-md">
+          <p className="text-sm text-blue-200/90 max-w-md">
             Automatically parses your executable, batch script, zip archive, or asset and prepares it for the catalog.
           </p>
         </div>
@@ -525,6 +564,8 @@ export default function App() {
         }}
         onResourcePublished={handleResourcePublished}
         initialFile={droppedFile}
+        storageUsage={storageUsage}
+        onRefreshStorage={refreshStorage}
       />
 
       {/* Personal Saved Vault Drawer */}

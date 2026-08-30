@@ -69,12 +69,12 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
   };
 
   return (
-    <section className="relative overflow-hidden pt-10 pb-8 border-b border-emerald-100 dark:border-zinc-800 bg-gradient-to-b from-emerald-50/70 via-white to-white dark:from-zinc-950 dark:via-zinc-900/90 dark:to-zinc-900 transition-colors duration-200">
+    <section className="relative overflow-hidden pt-10 pb-8 border-b border-blue-100 dark:border-zinc-800 bg-gradient-to-b from-blue-50/70 via-white to-white dark:from-zinc-950 dark:via-zinc-900/90 dark:to-zinc-900 transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Main Headline */}
         <div className="text-center max-w-3xl mx-auto space-y-2.5 mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 text-xs font-semibold shadow-2xs">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/80 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-400 text-xs font-semibold shadow-2xs">
+            <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 animate-pulse" />
             <span>Tech Support Vault • SEB Files • BAT Scripts • Developer Tools • Documentation</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-50 font-sans">
@@ -89,11 +89,11 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
         <div className="max-w-3xl mx-auto mb-8">
           <div className="relative group">
             {/* Ambient Glow */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl blur-md opacity-25 dark:opacity-40 group-hover:opacity-50 transition duration-300 pointer-events-none" />
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur-md opacity-25 dark:opacity-40 group-hover:opacity-50 transition duration-300 pointer-events-none" />
             
             {/* Input Container */}
-            <div className="relative flex items-center bg-white dark:bg-zinc-900 border-2 border-emerald-300 dark:border-zinc-700 hover:border-emerald-400 dark:hover:border-emerald-500/70 rounded-2xl px-5 py-4 shadow-xl shadow-emerald-500/10 dark:shadow-black/60 focus-within:border-emerald-500 dark:focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-500/20 transition-all duration-200">
-              <Search className="w-6 h-6 text-emerald-500 dark:text-emerald-400 mr-3.5 shrink-0 transition" />
+            <div className="relative flex items-center bg-white dark:bg-zinc-900 border-2 border-blue-300 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500/70 rounded-2xl px-5 py-4 shadow-xl shadow-blue-500/10 dark:shadow-black/60 focus-within:border-blue-500 dark:focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/20 transition-all duration-200">
+              <Search className="w-6 h-6 text-blue-600 dark:text-blue-400 mr-3.5 shrink-0 transition" />
               <input
                 id="main-search-input"
                 type="text"
@@ -112,7 +112,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                 </button>
               )}
               <div className="shrink-0 flex items-center gap-1.5 pl-4 border-l-2 border-zinc-200 dark:border-zinc-800 text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
-                <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-sm sm:text-base">{totalResults}</span>
+                <span className="font-mono font-extrabold text-blue-600 dark:text-blue-400 text-sm sm:text-base">{totalResults}</span>
                 <span className="font-medium">available</span>
               </div>
             </div>
@@ -128,7 +128,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
               onDoubleClick={() => handleStepCategory('prev')}
               className={`shrink-0 p-2.5 rounded-xl border transition cursor-pointer shadow-2xs flex items-center justify-center ${
                 canScrollLeft
-                  ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 dark:hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-zinc-700'
+                  ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-zinc-700'
                   : 'bg-zinc-100/60 dark:bg-zinc-900/60 text-zinc-300 dark:text-zinc-600 border-zinc-200/50 dark:border-zinc-800 cursor-not-allowed'
               }`}
               title="Scroll left"
@@ -150,8 +150,8 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                     onClick={() => onCategorySelect(cat.id)}
                     className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-2 border shrink-0 ${
                       isActive
-                        ? 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-600 font-bold shadow-md shadow-emerald-600/25'
-                        : 'bg-white dark:bg-zinc-850 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-750 hover:bg-emerald-50/60 dark:hover:bg-zinc-800 hover:border-emerald-200 dark:hover:border-emerald-500/40 hover:text-emerald-700 dark:hover:text-emerald-400 shadow-2xs'
+                        ? 'bg-blue-600 dark:bg-blue-600 text-white border-blue-600 font-bold shadow-md shadow-blue-600/25'
+                        : 'bg-white dark:bg-zinc-850 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-750 hover:bg-blue-50/60 dark:hover:bg-zinc-800 hover:border-blue-200 dark:hover:border-blue-500/40 hover:text-blue-700 dark:hover:text-blue-400 shadow-2xs'
                     }`}
                   >
                     <span>{cat.label}</span>
@@ -166,7 +166,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
               onDoubleClick={() => handleStepCategory('next')}
               className={`shrink-0 p-2.5 rounded-xl border transition cursor-pointer shadow-2xs flex items-center justify-center ${
                 canScrollRight
-                  ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 dark:hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-zinc-700'
+                  ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-zinc-700'
                   : 'bg-zinc-100/60 dark:bg-zinc-900/60 text-zinc-300 dark:text-zinc-600 border-zinc-200/50 dark:border-zinc-800 cursor-not-allowed'
               }`}
               title="Scroll right"

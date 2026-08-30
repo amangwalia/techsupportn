@@ -38,9 +38,41 @@ const storage = multer.diskStorage({
   },
 });
 
+export const MAX_STORAGE_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB Capacity in bytes (4,294,967,296)
+
+export function formatByteSize(bytes: number): string {
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 2 : 1)} ${units[i]}`;
+}
+
+export function calculateStorageUsed(): { usedBytes: number; fileCount: number } {
+  let usedBytes = 0;
+  let fileCount = 0;
+  try {
+    if (fs.existsSync(UPLOADS_DIR)) {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      for (const file of files) {
+        const fullPath = path.join(UPLOADS_DIR, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile()) {
+          usedBytes += stat.size;
+          if (file !== "community_resources.json") {
+            fileCount++;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error calculating storage used:", err);
+  }
+  return { usedBytes, fileCount };
+}
+
 const upload = multer({
   storage,
-  limits: { fileSize: 300 * 1024 * 1024 }, // 300MB
+  limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB per individual file, up to 4GB aggregate
 });
 
 export function readResourcesMetadata(): any[] {
@@ -67,7 +99,40 @@ export function writeResourcesMetadata(items: any[]): boolean {
 
 // 1. Health check
 apiRouter.get("/health", (req: Request, res: Response) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), totalUploads: readResourcesMetadata().length });
+  const { usedBytes } = calculateStorageUsed();
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(), 
+    totalUploads: readResourcesMetadata().length,
+    storage: {
+      total: "4.00 GB",
+      used: formatByteSize(usedBytes),
+      remaining: formatByteSize(Math.max(0, MAX_STORAGE_BYTES - usedBytes))
+    }
+  });
+});
+
+// 1.1 Storage Usage Endpoint
+apiRouter.get("/storage-usage", (req: Request, res: Response) => {
+  try {
+    const { usedBytes, fileCount } = calculateStorageUsed();
+    const remainingBytes = Math.max(0, MAX_STORAGE_BYTES - usedBytes);
+    const usedPercentage = Math.min(100, (usedBytes / MAX_STORAGE_BYTES) * 100);
+
+    res.json({
+      totalBytes: MAX_STORAGE_BYTES,
+      usedBytes,
+      remainingBytes,
+      usedPercentage: parseFloat(usedPercentage.toFixed(2)),
+      formattedTotal: "4.00 GB",
+      formattedUsed: formatByteSize(usedBytes),
+      formattedRemaining: formatByteSize(remainingBytes),
+      fileCount,
+      limitExceeded: usedBytes >= MAX_STORAGE_BYTES,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to calculate storage usage" });
+  }
 });
 
 // 2. Get all community uploaded resources
@@ -114,6 +179,29 @@ apiRouter.post("/resources/upload", upload.single("file"), async (req: Request, 
     let fileSizeBytes = file?.size || 0;
     let sha256Hash = "";
     let detectedMime = file?.mimetype || "application/octet-stream";
+
+    // 4GB Storage Limit Check
+    const currentUsage = calculateStorageUsed();
+    if (file) {
+      fileSizeBytes = file.size;
+    } else if (base64Data) {
+      fileSizeBytes = Math.round((base64Data.length * 3) / 4);
+    } else if (rawContent) {
+      fileSizeBytes = Buffer.byteLength(rawContent, "utf-8");
+    }
+
+    if (currentUsage.usedBytes + fileSizeBytes > MAX_STORAGE_BYTES) {
+      if (file && fs.existsSync(file.path)) {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      }
+      const remainingMb = Math.max(0, (MAX_STORAGE_BYTES - currentUsage.usedBytes) / (1024 * 1024)).toFixed(1);
+      return res.status(413).json({
+        error: `4 GB Storage Limit Reached! Uploading this file exceeds maximum capacity. Remaining storage: ${remainingMb} MB.`,
+        code: "STORAGE_LIMIT_EXCEEDED",
+        remainingBytes: Math.max(0, MAX_STORAGE_BYTES - currentUsage.usedBytes),
+        totalBytes: MAX_STORAGE_BYTES,
+      });
+    }
 
     if (file) {
       storageFileName = file.filename;

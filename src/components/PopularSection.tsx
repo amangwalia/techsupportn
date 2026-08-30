@@ -65,7 +65,7 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+          <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
             <Flame className="w-4 h-4" />
           </div>
           <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
@@ -79,7 +79,7 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
             onClick={() => handleScroll('left')}
             className={`p-1.5 rounded-lg border transition cursor-pointer ${
               canScrollLeft
-                ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:text-emerald-600'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:text-blue-600'
                 : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-300 dark:text-zinc-600 border-zinc-200 dark:border-zinc-800 cursor-not-allowed opacity-50'
             }`}
             title="Previous"
@@ -91,7 +91,7 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
             onClick={() => handleScroll('right')}
             className={`p-1.5 rounded-lg border transition cursor-pointer ${
               canScrollRight
-                ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:text-emerald-600'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:text-blue-600'
                 : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-300 dark:text-zinc-600 border-zinc-200 dark:border-zinc-800 cursor-not-allowed opacity-50'
             }`}
             title="Next"
@@ -118,7 +118,7 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
             >
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 font-bold">
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60 font-bold">
                     {item.format}
                   </span>
                   <span className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
@@ -139,8 +139,8 @@ export const PopularSection: React.FC<PopularSectionProps> = ({
                 disabled={isDownloading}
                 className={`w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   isDownloaded
-                    ? 'bg-teal-700 text-white shadow-teal-700/20'
-                    : 'bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white shadow-emerald-600/25'
+                    ? 'bg-blue-800 text-white shadow-blue-800/20'
+                    : 'bg-blue-600 hover:bg-blue-700 active:scale-98 text-white shadow-blue-600/25'
                 }`}
               >
                 {isDownloaded ? (

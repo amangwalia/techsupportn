@@ -1,4 +1,65 @@
-import { ResourceItem } from '../types';
+import { ResourceItem, StorageUsageInfo } from '../types';
+
+export const MAX_STORAGE_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB (4,294,967,296 bytes)
+
+export const formatByteSize = (bytes: number): string => {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 2 : 1)} ${units[i]}`;
+};
+
+export const parseSizeStringToBytes = (sizeStr?: string): number => {
+  if (!sizeStr) return 0;
+  const clean = sizeStr.toUpperCase().trim();
+  const num = parseFloat(clean);
+  if (isNaN(num)) return 0;
+  if (clean.includes('GB')) return Math.round(num * 1024 * 1024 * 1024);
+  if (clean.includes('MB')) return Math.round(num * 1024 * 1024);
+  if (clean.includes('KB')) return Math.round(num * 1024);
+  return Math.round(num);
+};
+
+/**
+ * Fetches accurate storage usage from server/D1, or calculates locally from cache/IndexedDB
+ */
+export const fetchStorageUsage = async (cachedItems?: ResourceItem[]): Promise<StorageUsageInfo> => {
+  try {
+    const res = await fetch('/api/storage-usage');
+    if (res.ok) {
+      const data: StorageUsageInfo = await res.json();
+      return data;
+    }
+  } catch (e) {
+    console.warn('Could not query /api/storage-usage, computing locally:', e);
+  }
+
+  // Fallback calculation using cached resources & local items
+  const items = cachedItems || (await getUserUploadedResources());
+  let usedBytes = 0;
+  for (const it of items) {
+    if (it.rawContent) {
+      usedBytes += new TextEncoder().encode(it.rawContent).length;
+    } else {
+      usedBytes += parseSizeStringToBytes(it.size);
+    }
+  }
+
+  const remainingBytes = Math.max(0, MAX_STORAGE_BYTES - usedBytes);
+  const usedPercentage = Math.min(100, (usedBytes / MAX_STORAGE_BYTES) * 100);
+
+  return {
+    totalBytes: MAX_STORAGE_BYTES,
+    usedBytes,
+    remainingBytes,
+    usedPercentage: parseFloat(usedPercentage.toFixed(2)),
+    formattedTotal: '4.00 GB',
+    formattedUsed: formatByteSize(usedBytes),
+    formattedRemaining: formatByteSize(remainingBytes),
+    fileCount: items.length,
+    limitExceeded: usedBytes >= MAX_STORAGE_BYTES,
+  };
+};
 
 const DB_NAME = 'TechSupportCatalogDB';
 const DB_VERSION = 1;
@@ -182,8 +243,16 @@ export const saveUserUploadedResource = async (
         if (res.ok) {
           const savedResource: ResourceItem = await res.json();
           return { success: true, resource: savedResource };
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          if (res.status === 413 || errData.code === 'STORAGE_LIMIT_EXCEEDED' || errData.error?.includes('Storage')) {
+            return { success: false, error: errData.error || 'Storage capacity limit of 4 GB exceeded.' };
+          }
         }
-      } catch (formErr) {
+      } catch (formErr: any) {
+        if (formErr?.message?.includes('Storage')) {
+          return { success: false, error: formErr.message };
+        }
         console.warn('FormData upload error, trying Base64 fallback:', formErr);
       }
     }
@@ -226,8 +295,16 @@ export const saveUserUploadedResource = async (
       if (res.ok) {
         const savedResource: ResourceItem = await res.json();
         return { success: true, resource: savedResource };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 413 || errData.code === 'STORAGE_LIMIT_EXCEEDED' || errData.error?.includes('Storage')) {
+          return { success: false, error: errData.error || 'Storage capacity limit of 4 GB exceeded.' };
+        }
       }
-    } catch (jsonErr) {
+    } catch (jsonErr: any) {
+      if (jsonErr?.message?.includes('Storage')) {
+        return { success: false, error: jsonErr.message };
+      }
       console.warn('JSON upload failed, activating local persistence fallback:', jsonErr);
     }
 

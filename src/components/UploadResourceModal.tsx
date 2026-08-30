@@ -18,10 +18,12 @@ import {
   CheckCircle2,
   Share2,
   Cloud,
-  Link as LinkIcon
+  Link as LinkIcon,
+  HardDrive,
+  AlertTriangle
 } from 'lucide-react';
-import { ResourceItem, ResourceCategory, OperatingSystem, FileFormat } from '../types';
-import { saveUserUploadedResource } from '../utils/storage';
+import { ResourceItem, ResourceCategory, OperatingSystem, FileFormat, StorageUsageInfo } from '../types';
+import { saveUserUploadedResource, fetchStorageUsage, MAX_STORAGE_BYTES, formatByteSize } from '../utils/storage';
 import { parseGoogleDriveUrl } from '../utils/downloader';
 
 interface UploadResourceModalProps {
@@ -29,13 +31,17 @@ interface UploadResourceModalProps {
   onClose: () => void;
   onResourcePublished: (newResource: ResourceItem) => void;
   initialFile?: File | null;
+  storageUsage?: StorageUsageInfo | null;
+  onRefreshStorage?: () => void;
 }
 
 export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
   isOpen,
   onClose,
   onResourcePublished,
-  initialFile
+  initialFile,
+  storageUsage: initialStorageUsage,
+  onRefreshStorage
 }) => {
   if (!isOpen) return null;
 
@@ -45,6 +51,10 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [fileTextContent, setFileTextContent] = useState<string>('');
+
+  // Storage Quota State
+  const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(initialStorageUsage || null);
+  const [storageLoading, setStorageLoading] = useState(false);
 
   // Form Fields
   const [title, setTitle] = useState('');
@@ -66,6 +76,28 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [showCodePreview, setShowCodePreview] = useState(false);
 
+  // Fetch updated storage usage on modal mount
+  useEffect(() => {
+    let mounted = true;
+    const loadUsage = async () => {
+      setStorageLoading(true);
+      try {
+        const usage = await fetchStorageUsage();
+        if (mounted) {
+          setStorageUsage(usage);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch storage usage:', err);
+      } finally {
+        if (mounted) setStorageLoading(false);
+      }
+    };
+    loadUsage();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Format file size nicely
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -74,6 +106,13 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
+
+  // Compute storage impact of selected file
+  const currentUsed = storageUsage ? storageUsage.usedBytes : 0;
+  const currentRemaining = Math.max(0, MAX_STORAGE_BYTES - currentUsed);
+  const selectedFileSize = uploadMode === 'file' && selectedFile ? selectedFile.size : 0;
+  const isOverQuota = uploadMode === 'file' && (currentUsed + selectedFileSize > MAX_STORAGE_BYTES);
+  const remainingAfterUpload = Math.max(0, currentRemaining - selectedFileSize);
 
   // Generate clean TypeScript ResourceItem code representation
   const generateCodeSnippet = (): string => {
@@ -371,6 +410,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
         throw new Error(result.error || 'Failed to save to central server storage');
       }
 
+      onRefreshStorage?.();
       onResourcePublished(result.resource);
       onClose();
     } catch (err: any) {
@@ -388,7 +428,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
               <Upload className="w-4 h-4" />
             </div>
             <div>
@@ -417,6 +457,68 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
             </div>
           )}
 
+          {/* Storage Quota Status Bar */}
+          <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100">
+                <HardDrive className={`w-4 h-4 ${isOverQuota ? 'text-rose-500' : 'text-blue-600'}`} />
+                <span>Cloud Storage Quota</span>
+                <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400 font-mono">
+                  (4.00 GB Limit)
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="text-zinc-500 dark:text-zinc-400">Remaining:</span>
+                <span className={`font-bold font-mono ${isOverQuota ? 'text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                  {formatByteSize(currentRemaining)} left
+                </span>
+              </div>
+            </div>
+
+            {/* Storage Progress Bar */}
+            <div className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden flex">
+              <div 
+                className={`h-full transition-all duration-300 ${
+                  isOverQuota ? 'bg-rose-500' : 'bg-blue-600'
+                }`}
+                style={{ width: `${Math.min(100, (currentUsed / MAX_STORAGE_BYTES) * 100)}%` }}
+                title={`Used: ${formatByteSize(currentUsed)}`}
+              />
+              {selectedFileSize > 0 && !isOverQuota && (
+                <div 
+                  className="h-full bg-blue-400/60 dark:bg-blue-300/50 animate-pulse transition-all duration-300"
+                  style={{ width: `${Math.min(100, (selectedFileSize / MAX_STORAGE_BYTES) * 100)}%` }}
+                  title={`This File: ${formatByteSize(selectedFileSize)}`}
+                />
+              )}
+            </div>
+
+            {/* Storage Details Breakdown */}
+            <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 pt-0.5">
+              <span>Used: <strong className="text-zinc-700 dark:text-zinc-300 font-mono">{formatByteSize(currentUsed)}</strong></span>
+              {selectedFileSize > 0 && (
+                <span className="text-zinc-600 dark:text-zinc-300 font-mono">
+                  Selected File: <strong className="text-blue-600 dark:text-blue-400">+{formatByteSize(selectedFileSize)}</strong>
+                  {` (Will leave ${formatByteSize(remainingAfterUpload)})`}
+                </span>
+              )}
+              <span>Total: <strong className="text-zinc-700 dark:text-zinc-300 font-mono">4.00 GB</strong></span>
+            </div>
+
+            {/* Over Quota Warning */}
+            {isOverQuota && (
+              <div className="flex items-start gap-2 p-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/80 rounded-lg text-rose-700 dark:text-rose-300 text-xs">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                <div>
+                  <strong className="block font-bold">Upload Exceeds 4 GB Storage Limit!</strong>
+                  <span>
+                    This file is {formatByteSize(selectedFileSize)}, but you only have {formatByteSize(currentRemaining)} left. Please select a smaller file, or choose Google Drive Link above to host files up to 15 GB for free.
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Mode Switcher: Direct File vs Google Drive */}
           <div className="grid grid-cols-2 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-semibold">
             <button
@@ -424,7 +526,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
               onClick={() => setUploadMode('file')}
               className={`py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition cursor-pointer ${
                 uploadMode === 'file'
-                  ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
               }`}
             >
@@ -436,7 +538,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
               onClick={() => setUploadMode('gdrive')}
               className={`py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition cursor-pointer ${
                 uploadMode === 'gdrive'
-                  ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
               }`}
             >
@@ -447,16 +549,16 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
 
           {/* Google Drive URL Input Mode */}
           {uploadMode === 'gdrive' ? (
-            <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 space-y-3">
+            <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50 space-y-3">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">
                   <Cloud className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                  <h3 className="text-xs font-bold text-blue-900 dark:text-blue-200">
                     Google Drive Public Link Integration
                   </h3>
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  <p className="text-[11px] text-blue-700 dark:text-blue-400">
                     Host unlimited apps and files on your 15GB Gmail Google Drive with 1-click downloads for all visitors.
                   </p>
                 </div>
@@ -476,7 +578,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                     onChange={(e) => setExternalDownloadUrl(e.target.value)}
                     placeholder="https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing"
                     required={uploadMode === 'gdrive'}
-                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-emerald-500"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-blue-500"
                   />
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
@@ -494,7 +596,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                     value={approxSize}
                     onChange={(e) => setApproxSize(e.target.value)}
                     placeholder="e.g. 45 MB, 1.2 GB"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -506,7 +608,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                     value={installCommand}
                     onChange={(e) => setInstallCommand(e.target.value)}
                     placeholder="e.g. setup.exe, tool.zip"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs outline-none focus:border-emerald-500 font-mono"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs outline-none focus:border-blue-500 font-mono"
                   />
                 </div>
               </div>
@@ -525,10 +627,10 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-2xl p-6 text-center transition cursor-pointer flex flex-col items-center justify-center ${
                   dragActive
-                    ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20'
+                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
                     : selectedFile
-                    ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50/30 dark:bg-emerald-950/10'
-                    : 'border-zinc-300 dark:border-zinc-700 hover:border-emerald-400 dark:hover:border-emerald-500 bg-zinc-50/50 dark:bg-zinc-800/30'
+                    ? 'border-blue-400 dark:border-blue-600 bg-blue-50/30 dark:bg-blue-950/10'
+                    : 'border-zinc-300 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500 bg-zinc-50/50 dark:bg-zinc-800/30'
                 }`}
               >
                 <input
@@ -540,7 +642,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
 
                 {selectedFile ? (
                   <div className="flex flex-col items-center space-y-2">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                       <Check className="w-6 h-6" />
                     </div>
                     <div className="text-center">
@@ -551,18 +653,18 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                         {formatFileSize(selectedFile.size)} • {selectedFile.type || 'Custom File'}
                       </p>
                     </div>
-                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold underline">
+                    <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold underline">
                       Click or drop another file to change
                     </span>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center space-y-2">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                       <Upload className="w-6 h-6" />
                     </div>
                     <div>
                       <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                        Drag and drop your file here, or <span className="text-emerald-600 dark:text-emerald-400">browse</span>
+                        Drag and drop your file here, or <span className="text-blue-600 dark:text-blue-400">browse</span>
                       </p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                         Supports .exe, .bat, .seb, .zip, .apk, .mp4, .png, .jpg, .pdf, scripts, etc.
@@ -608,7 +710,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. My Windows Optimizer"
                 required
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
 
@@ -619,7 +721,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as ResourceCategory)}
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="apps">🚀 Apps & Executables (.exe, .app, .apk)</option>
                 <option value="bat-files">⚡ BAT & Scripts (.bat, .cmd, .ps1, .sh)</option>
@@ -640,7 +742,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
               value={tagline}
               onChange={(e) => setTagline(e.target.value)}
               placeholder="Brief 1-sentence summary..."
-              className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
 
@@ -653,7 +755,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Detailed description, instructions, or features..."
-              className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-none"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-none"
             />
           </div>
 
@@ -672,8 +774,8 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                     onClick={() => toggleOs(os)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
                       isSelected
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-emerald-300'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-blue-300'
                     }`}
                   >
                     {os}
@@ -694,7 +796,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                 value={format}
                 onChange={(e) => setFormat(e.target.value.toUpperCase() as FileFormat)}
                 placeholder="EXE, BAT, MP4, etc."
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none font-mono focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none font-mono focus:border-blue-500"
               />
             </div>
             <div>
@@ -706,7 +808,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                 value={version}
                 onChange={(e) => setVersion(e.target.value)}
                 placeholder="1.0.0"
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none font-mono focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none font-mono focus:border-blue-500"
               />
             </div>
             <div>
@@ -718,7 +820,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
                 placeholder="My Upload"
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-blue-500"
               />
             </div>
           </div>
@@ -734,7 +836,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
                 placeholder="Windows, Utility, Tool"
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-xs sm:text-sm outline-none focus:border-blue-500"
               />
             </div>
 
@@ -744,7 +846,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                 id="popular-checkbox"
                 checked={isPopular}
                 onChange={(e) => setIsPopular(e.target.checked)}
-                className="w-4 h-4 text-emerald-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-emerald-500"
+                className="w-4 h-4 text-blue-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-blue-500"
               />
               <label htmlFor="popular-checkbox" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
                 Feature in Popular Carousel
@@ -756,7 +858,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
           <div className="p-4 rounded-xl bg-zinc-900 text-zinc-100 border border-zinc-800 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
                   <Code className="w-4 h-4" />
                 </div>
                 <div>
@@ -782,8 +884,8 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
                   onClick={handleCopyCode}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                     copiedCode
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-xs'
                   }`}
                 >
                   {copiedCode ? (
@@ -802,13 +904,13 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
             </div>
 
             {showCodePreview && (
-              <pre className="p-3 rounded-lg bg-black/80 text-emerald-400 font-mono text-[11px] overflow-x-auto max-h-48 border border-zinc-800">
+              <pre className="p-3 rounded-lg bg-black/80 text-blue-400 font-mono text-[11px] overflow-x-auto max-h-48 border border-zinc-800">
                 {generateCodeSnippet()}
               </pre>
             )}
 
             <p className="text-[11px] text-zinc-400">
-              💡 <span className="font-semibold text-zinc-300">How to make permanent:</span> Click <span className="text-emerald-400 font-mono">Copy Code Snippet</span> above, then paste it in your next chat message to the assistant: <span className="italic text-zinc-300">"Please add this resource to the catalog in code"</span>.
+              💡 <span className="font-semibold text-zinc-300">How to make permanent:</span> Click <span className="text-blue-400 font-mono">Copy Code Snippet</span> above, then paste it in your next chat message to the assistant: <span className="italic text-zinc-300">"Please add this resource to the catalog in code"</span>.
             </p>
           </div>
 
@@ -819,7 +921,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
               onClick={handleCopyCode}
               className="px-3.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5"
             >
-              {copiedCode ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+              {copiedCode ? <CheckCircle2 className="w-4 h-4 text-blue-500" /> : <Copy className="w-4 h-4" />}
               <span>{copiedCode ? 'Code Copied' : 'Copy Code for AI'}</span>
             </button>
 
@@ -833,13 +935,19 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={saving}
-                className={`px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-600/25 transition cursor-pointer flex items-center gap-2 ${
-                  saving ? 'opacity-50 cursor-not-allowed' : ''
+                disabled={saving || (uploadMode === 'file' && isOverQuota)}
+                className={`px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-bold shadow-md shadow-blue-600/25 transition cursor-pointer flex items-center gap-2 ${
+                  saving || (uploadMode === 'file' && isOverQuota) ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 <Upload className="w-4 h-4" />
-                <span>{saving ? 'Publishing...' : 'Publish to Catalog'}</span>
+                <span>
+                  {saving 
+                    ? 'Publishing...' 
+                    : uploadMode === 'file' && isOverQuota 
+                      ? 'Quota Exceeded' 
+                      : 'Publish to Catalog'}
+                </span>
               </button>
             </div>
           </div>

@@ -76,7 +76,7 @@ export const MyVaultDrawer: React.FC<MyVaultDrawerProps> = ({
         {/* Header */}
         <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+            <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
               <Bookmark className="w-5 h-5" />
             </div>
             <div>
@@ -100,8 +100,8 @@ export const MyVaultDrawer: React.FC<MyVaultDrawerProps> = ({
               disabled={batchDownloading}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
                 batchSuccess
-                  ? 'bg-teal-700 text-white'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                  ? 'bg-blue-800 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xs'
               }`}
             >
               {batchSuccess ? (
@@ -150,7 +150,7 @@ export const MyVaultDrawer: React.FC<MyVaultDrawerProps> = ({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/60 font-semibold">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800/60 font-semibold">
                       {item.format} • {item.size}
                     </span>
                     <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 mt-1">
@@ -169,7 +169,7 @@ export const MyVaultDrawer: React.FC<MyVaultDrawerProps> = ({
                 <div className="flex items-center justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   <button
                     onClick={() => triggerResourceDownload(item)}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-xs"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download</span>

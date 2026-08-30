@@ -111,6 +111,42 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: E
     const isPopular = popular === 'true' || popular === true ? 1 : 0;
     const resourceId = `comm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
+    const MAX_STORAGE_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB Limit
+
+    // Check current D1 storage usage if DB is bound
+    if (env.DB) {
+      const allRows = await env.DB.prepare('SELECT file_data, raw_content, size FROM resources').all();
+      let currentUsedBytes = 0;
+      if (allRows && allRows.results) {
+        for (const row of allRows.results as any[]) {
+          if (row.file_data) {
+            currentUsedBytes += Math.round((String(row.file_data).length * 3) / 4);
+          } else if (row.raw_content) {
+            currentUsedBytes += new TextEncoder().encode(String(row.raw_content)).length;
+          } else if (row.size) {
+            const sizeStr = String(row.size).toUpperCase().trim();
+            const num = parseFloat(sizeStr);
+            if (!isNaN(num)) {
+              if (sizeStr.includes('GB')) currentUsedBytes += Math.round(num * 1024 * 1024 * 1024);
+              else if (sizeStr.includes('MB')) currentUsedBytes += Math.round(num * 1024 * 1024);
+              else if (sizeStr.includes('KB')) currentUsedBytes += Math.round(num * 1024);
+              else currentUsedBytes += Math.round(num);
+            }
+          }
+        }
+      }
+
+      if (currentUsedBytes + fileSizeBytes > MAX_STORAGE_BYTES) {
+        const remainingMb = Math.max(0, (MAX_STORAGE_BYTES - currentUsedBytes) / (1024 * 1024)).toFixed(1);
+        return jsonResponse({
+          error: `Storage capacity exceeded! Total upload limit is 4 GB. Remaining storage available: ${remainingMb} MB.`,
+          code: 'STORAGE_LIMIT_EXCEEDED',
+          remainingBytes: Math.max(0, MAX_STORAGE_BYTES - currentUsedBytes),
+          maxBytes: MAX_STORAGE_BYTES,
+        }, 413);
+      }
+    }
+
     const isImg = detectedMime.startsWith('image/') || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF', 'SVG'].includes(finalFormat);
     const isVid = detectedMime.startsWith('video/') || ['MP4', 'WEBM', 'MKV', 'MOV'].includes(finalFormat);
 

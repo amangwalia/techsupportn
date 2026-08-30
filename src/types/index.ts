@@ -96,3 +96,16 @@ export interface ResourceItem {
   changelog?: { version: string; date: string; notes: string[] }[];
   alternatives?: string[];
 }
+
+export interface StorageUsageInfo {
+  totalBytes: number;
+  usedBytes: number;
+  remainingBytes: number;
+  usedPercentage: number;
+  formattedTotal: string;
+  formattedUsed: string;
+  formattedRemaining: string;
+  fileCount: number;
+  limitExceeded?: boolean;
+}
+
