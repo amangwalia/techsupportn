@@ -9,6 +9,7 @@ export const apiRouter = Router();
 // Ensure storage directory
 const UPLOADS_DIR = path.join(process.cwd(), "uploads_storage");
 const METADATA_FILE = path.join(UPLOADS_DIR, "community_resources.json");
+const USERS_FILE = path.join(UPLOADS_DIR, "vault_users.json");
 
 if (!fs.existsSync(UPLOADS_DIR)) {
   try {
@@ -25,6 +26,67 @@ if (!fs.existsSync(METADATA_FILE)) {
     console.error("Failed to initialize community_resources.json:", err);
   }
 }
+
+export interface ServerUserAccount {
+  username: string;
+  role: "admin" | "user";
+  displayName: string;
+  email: string;
+  passwordHash: string;
+  createdAt?: string;
+}
+
+const DEFAULT_SYSTEM_USERS: ServerUserAccount[] = [
+  {
+    username: "admin",
+    role: "admin",
+    displayName: "Administrator",
+    email: "admin@techsupport.org",
+    passwordHash: "admin123",
+  },
+  {
+    username: "user",
+    role: "user",
+    displayName: "Community Member",
+    email: "user@techsupport.org",
+    passwordHash: "user123",
+  },
+];
+
+export function readUsersData(): ServerUserAccount[] {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error("Error reading users file:", err);
+  }
+
+  // Initialize with default users
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(DEFAULT_SYSTEM_USERS, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error creating users file:", err);
+  }
+  return DEFAULT_SYSTEM_USERS;
+}
+
+export function writeUsersData(users: ServerUserAccount[]): boolean {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing users file:", err);
+    return false;
+  }
+}
+
+// Initialize users file if missing
+readUsersData();
 
 // Multer storage
 const storage = multer.diskStorage({
@@ -474,4 +536,206 @@ apiRouter.post("/resources/:id/download-count", (req: Request, res: Response) =>
     return res.json({ success: true, count: item.downloadCount });
   }
   res.status(404).json({ error: "Not found" });
+});
+
+// 8. User Authentication & Login
+apiRouter.post("/auth/login", (req: Request, res: Response) => {
+  try {
+    const { loginId, password, requireAdmin } = req.body || {};
+    const trimmedId = (loginId || "").trim().toLowerCase();
+    const trimmedPass = (password || "").trim();
+
+    if (!trimmedId || !trimmedPass) {
+      return res.status(400).json({
+        success: false,
+        error: requireAdmin
+          ? "Invalid username or password."
+          : "Invalid login ID or password. Contact your administrator.",
+      });
+    }
+
+    const users = readUsersData();
+    const user = users.find(
+      (u) =>
+        u.username.toLowerCase() === trimmedId ||
+        (u.email && u.email.toLowerCase() === trimmedId)
+    );
+
+    if (!user || user.passwordHash !== trimmedPass) {
+      return res.status(401).json({
+        success: false,
+        error: requireAdmin
+          ? "Invalid username or password."
+          : "Invalid login ID or password. Contact your administrator.",
+      });
+    }
+
+    if (requireAdmin && user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        error: "Invalid username or password.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        username: user.username,
+        role: user.role,
+        displayName: user.displayName || user.username,
+        email: user.email,
+      },
+    });
+  } catch (err: any) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Internal server error during authentication" });
+  }
+});
+
+// 9. Get all registered accounts (For Admin Management)
+apiRouter.get("/auth/users", (req: Request, res: Response) => {
+  try {
+    const users = readUsersData();
+    res.json(users);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch accounts" });
+  }
+});
+
+// 10. Create new user account (Admin Provisioning)
+apiRouter.post("/auth/users", (req: Request, res: Response) => {
+  try {
+    const { username, email, password, role, displayName } = req.body || {};
+    const cleanUsername = (username || "").trim().toLowerCase();
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanPass = (password || "").trim();
+
+    if (!cleanUsername || cleanUsername.length < 3) {
+      return res.status(400).json({ error: "Username must be at least 3 characters." });
+    }
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return res.status(400).json({ error: "Please provide a valid email address." });
+    }
+    if (!cleanPass || cleanPass.length < 4) {
+      return res.status(400).json({ error: "Password must be at least 4 characters." });
+    }
+
+    const users = readUsersData();
+    if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
+      return res.status(409).json({ error: "This username is already taken." });
+    }
+    if (users.some((u) => u.email.toLowerCase() === cleanEmail)) {
+      return res.status(409).json({ error: "This email address is already registered." });
+    }
+
+    const newUser: ServerUserAccount = {
+      username: cleanUsername,
+      role: role === "admin" ? "admin" : "user",
+      displayName: (displayName || cleanUsername).trim(),
+      email: cleanEmail,
+      passwordHash: cleanPass,
+      createdAt: new Date().toISOString(),
+    };
+
+    users.push(newUser);
+    writeUsersData(users);
+
+    res.status(201).json({ success: true, user: newUser });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to create user account" });
+  }
+});
+
+// 11. Update user credentials (Admin or Admin's own profile)
+apiRouter.put("/auth/users/:username", (req: Request, res: Response) => {
+  try {
+    const targetUsername = decodeURIComponent(req.params.username || "").trim().toLowerCase();
+    const { newUsername, newEmail, newPassword, newDisplayName, newRole } = req.body || {};
+
+    const users = readUsersData();
+    const userIndex = users.findIndex((u) => u.username.toLowerCase() === targetUsername);
+
+    if (userIndex === -1) {
+      return res.status(404).json({ error: "User account not found." });
+    }
+
+    const current = users[userIndex];
+
+    // Username change
+    if (newUsername && newUsername.trim().toLowerCase() !== current.username.toLowerCase()) {
+      const nextUsername = newUsername.trim().toLowerCase();
+      if (nextUsername.length < 3) {
+        return res.status(400).json({ error: "Username must be at least 3 characters." });
+      }
+      if (users.some((u) => u.username.toLowerCase() === nextUsername)) {
+        return res.status(409).json({ error: "This username is already taken." });
+      }
+      current.username = nextUsername;
+    }
+
+    // Email change
+    if (newEmail && newEmail.trim().toLowerCase() !== current.email.toLowerCase()) {
+      const nextEmail = newEmail.trim().toLowerCase();
+      if (!nextEmail.includes("@")) {
+        return res.status(400).json({ error: "Valid email required." });
+      }
+      if (users.some((u) => u.email.toLowerCase() === nextEmail)) {
+        return res.status(409).json({ error: "This email is already registered." });
+      }
+      current.email = nextEmail;
+    }
+
+    // Password change
+    if (newPassword !== undefined && newPassword.trim() !== "") {
+      const nextPass = newPassword.trim();
+      if (nextPass.length < 4) {
+        return res.status(400).json({ error: "Password must be at least 4 characters." });
+      }
+      current.passwordHash = nextPass;
+    }
+
+    // Display Name change
+    if (newDisplayName !== undefined) {
+      current.displayName = newDisplayName.trim() || current.username;
+    }
+
+    // Role change
+    if (newRole !== undefined && (newRole === "admin" || newRole === "user")) {
+      current.role = newRole;
+    }
+
+    users[userIndex] = current;
+    writeUsersData(users);
+
+    res.json({ success: true, user: current });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to update user credentials" });
+  }
+});
+
+// 12. Delete user account
+apiRouter.delete("/auth/users/:username", (req: Request, res: Response) => {
+  try {
+    const targetUsername = decodeURIComponent(req.params.username || "").trim().toLowerCase();
+    const users = readUsersData();
+    const user = users.find((u) => u.username.toLowerCase() === targetUsername);
+
+    if (!user) {
+      return res.status(404).json({ error: "Account not found." });
+    }
+
+    if (user.role === "admin") {
+      const adminCount = users.filter((u) => u.role === "admin").length;
+      if (adminCount <= 1) {
+        return res.status(400).json({ error: "Cannot delete the only remaining Administrator." });
+      }
+    }
+
+    const updated = users.filter((u) => u.username.toLowerCase() !== targetUsername);
+    writeUsersData(updated);
+
+    res.json({ success: true, deleted: targetUsername });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to delete user" });
+  }
 });

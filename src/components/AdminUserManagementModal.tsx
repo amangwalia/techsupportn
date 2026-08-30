@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { 
   getRegisteredAccounts, 
+  fetchRegisteredAccounts,
   updateUserCredentials, 
   deleteUserAccount, 
   registerNewUser, 
@@ -78,18 +79,31 @@ export const AdminUserManagementModal: React.FC<AdminUserManagementModalProps> =
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedPassUser, setCopiedPassUser] = useState<string | null>(null);
 
-  // Refresh user accounts
-  const refreshAccountsList = () => {
-    const list = getRegisteredAccounts();
-    setAccounts(list);
+  // Refresh user accounts from server and local cache
+  const refreshAccountsList = async () => {
+    // Immediate render with local cache
+    const cached = getRegisteredAccounts();
+    setAccounts(cached);
     
     // Find current admin account details
-    const currentAdmin = list.find((a) => a.username.toLowerCase() === currentAdminUsername.toLowerCase());
+    const currentAdmin = cached.find((a) => a.username.toLowerCase() === currentAdminUsername.toLowerCase());
     if (currentAdmin) {
       setAdminUsername(currentAdmin.username);
       setAdminDisplayName(currentAdmin.displayName || currentAdmin.username);
       setAdminEmail(currentAdmin.email || '');
     }
+
+    // Fresh fetch from backend
+    try {
+      const fresh = await fetchRegisteredAccounts();
+      setAccounts(fresh);
+      const freshAdmin = fresh.find((a) => a.username.toLowerCase() === currentAdminUsername.toLowerCase());
+      if (freshAdmin) {
+        setAdminUsername(freshAdmin.username);
+        setAdminDisplayName(freshAdmin.displayName || freshAdmin.username);
+        setAdminEmail(freshAdmin.email || '');
+      }
+    } catch {}
   };
 
   useEffect(() => {
@@ -101,7 +115,7 @@ export const AdminUserManagementModal: React.FC<AdminUserManagementModalProps> =
     setEditingUser(null);
   }, [isOpen, currentAdminUsername]);
 
-  const handleUpdateAdminProfile = (e: React.FormEvent) => {
+  const handleUpdateAdminProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMessage(null);
     setAdminSaveLoading(true);
@@ -121,13 +135,13 @@ export const AdminUserManagementModal: React.FC<AdminUserManagementModalProps> =
       updates.newPassword = adminNewPassword.trim();
     }
 
-    const res = updateUserCredentials(currentAdminUsername, updates);
+    const res = await updateUserCredentials(currentAdminUsername, updates);
     setAdminSaveLoading(false);
 
     if (res.success && res.updatedUser) {
       setStatusMessage({ type: 'success', text: 'Admin profile & credentials updated successfully!' });
       setAdminNewPassword('');
-      refreshAccountsList();
+      await refreshAccountsList();
       if (onAdminProfileUpdated && res.updatedUser.username !== currentAdminUsername) {
         onAdminProfileUpdated(res.updatedUser.username);
       }
@@ -147,7 +161,7 @@ export const AdminUserManagementModal: React.FC<AdminUserManagementModalProps> =
     setStatusMessage(null);
   };
 
-  const handleSaveUserChanges = (e: React.FormEvent) => {
+  const handleSaveUserChanges = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     setStatusMessage(null);
@@ -170,24 +184,24 @@ export const AdminUserManagementModal: React.FC<AdminUserManagementModalProps> =
       updates.newPassword = editNewPassword.trim();
     }
 
-    const res = updateUserCredentials(editingUser.username, updates);
+    const res = await updateUserCredentials(editingUser.username, updates);
     setEditSaving(false);
 
     if (res.success) {
       setStatusMessage({ type: 'success', text: `Credentials for "${editingUser.username}" updated successfully!` });
       setEditingUser(null);
-      refreshAccountsList();
+      await refreshAccountsList();
     } else {
       setStatusMessage({ type: 'error', text: res.error || 'Failed to update user.' });
     }
   };
 
-  const handleCreateNewUser = (e: React.FormEvent) => {
+  const handleCreateNewUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMessage(null);
     setAddSaving(true);
 
-    const res = registerNewUser({
+    const res = await registerNewUser({
       username: newUsername.trim(),
       email: newEmail.trim(),
       password: newPassword.trim(),
@@ -204,13 +218,13 @@ export const AdminUserManagementModal: React.FC<AdminUserManagementModalProps> =
       setNewDisplayName('');
       setNewEmail('');
       setNewPassword('');
-      refreshAccountsList();
+      await refreshAccountsList();
     } else {
       setStatusMessage({ type: 'error', text: res.error || 'Failed to create user account.' });
     }
   };
 
-  const handleDeleteUser = (targetUsername: string) => {
+  const handleDeleteUser = async (targetUsername: string) => {
     if (targetUsername.toLowerCase() === currentAdminUsername.toLowerCase()) {
       setStatusMessage({ type: 'error', text: 'You cannot delete your own active administrator account.' });
       return;
@@ -220,10 +234,10 @@ export const AdminUserManagementModal: React.FC<AdminUserManagementModalProps> =
       return;
     }
 
-    const res = deleteUserAccount(targetUsername);
+    const res = await deleteUserAccount(targetUsername);
     if (res.success) {
       setStatusMessage({ type: 'success', text: `User account "${targetUsername}" deleted.` });
-      refreshAccountsList();
+      await refreshAccountsList();
     } else {
       setStatusMessage({ type: 'error', text: res.error || 'Failed to delete account.' });
     }

@@ -34,23 +34,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [successToast, setSuccessToast] = useState('');
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
 
     const isAdminRequired = loginType === 'admin';
 
-    setTimeout(() => {
-      const result = authenticateUser(loginId, password, isAdminRequired);
+    try {
+      const result = await authenticateUser(loginId, password, isAdminRequired);
       setLoading(false);
 
       if (result.success && result.user) {
         onLoginSuccess(result.user.username, result.user.role);
       } else {
-        setErrorMsg(result.error || 'Authentication failed. Please verify your login credentials.');
+        setErrorMsg(
+          result.error ||
+            (isAdminRequired
+              ? 'Invalid username or password.'
+              : 'Invalid login ID or password. Contact your administrator.')
+        );
       }
-    }, 250);
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg(
+        isAdminRequired
+          ? 'Invalid username or password.'
+          : 'Invalid login ID or password. Contact your administrator.'
+      );
+    }
   };
 
   return (
