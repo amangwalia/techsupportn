@@ -242,6 +242,13 @@ export const saveUserUploadedResource = async (
 
         if (res.ok) {
           const savedResource: ResourceItem = await res.json();
+          // Cache in IndexedDB for immediate local retrieval
+          if (file) {
+            saveBlobLocally(savedResource.id, file).catch(() => {});
+            if (item.id && item.id !== savedResource.id) {
+              saveBlobLocally(item.id, file).catch(() => {});
+            }
+          }
           return { success: true, resource: savedResource };
         } else {
           const errData = await res.json().catch(() => ({}));
@@ -345,11 +352,25 @@ export const getUserResourceBlob = async (id: string): Promise<Blob | null> => {
   const localBlob = await getBlobLocally(id);
   if (localBlob) return localBlob;
 
+  // Check possible ID aliases
+  if (id.startsWith('comm-')) {
+    const userAlias = id.replace('comm-', 'user-');
+    const localBlob2 = await getBlobLocally(userAlias);
+    if (localBlob2) return localBlob2;
+  } else if (id.startsWith('user-')) {
+    const commAlias = id.replace('user-', 'comm-');
+    const localBlob2 = await getBlobLocally(commAlias);
+    if (localBlob2) return localBlob2;
+  }
+
   // Then try server endpoint
   try {
     const res = await fetch(`/api/resources/file/${encodeURIComponent(id)}`);
     if (res.ok) {
-      return await res.blob();
+      const blob = await res.blob();
+      // Cache in IndexedDB for subsequent instant offline downloads
+      saveBlobLocally(id, blob).catch(() => {});
+      return blob;
     }
   } catch (e) {
     console.warn('Could not fetch blob from server:', e);

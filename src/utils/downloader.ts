@@ -14,7 +14,14 @@ export const downloadSingleFile = (filename: string, content: string, mimeType =
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Retain object URL for 2 minutes to ensure browser disk write completes without "File not available on site" error
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // Ignore
+    }
+  }, 120000);
 };
 
 /**
@@ -28,7 +35,14 @@ export const downloadBlobFile = (filename: string, blob: Blob) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Retain object URL for 2 minutes to allow browser async download stream to complete
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // Ignore
+    }
+  }, 120000);
 };
 
 /**
@@ -51,7 +65,13 @@ export const downloadZipArchive = async (zipFilename: string, files: { path: str
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // Ignore
+    }
+  }, 120000);
 };
 
 /**

@@ -320,32 +320,101 @@ apiRouter.post("/resources/upload", upload.single("file"), async (req: Request, 
   }
 });
 
-// 4. Download file
-apiRouter.get("/resources/file/:id", (req: Request, res: Response) => {
+// 4. Download file handler
+const handleFileDownload = (req: Request, res: Response) => {
   const { id } = req.params;
+  const decodedId = decodeURIComponent(id || "");
   const items = readResourcesMetadata();
-  const item = items.find((i) => i.id === id);
+  const item = items.find(
+    (i) =>
+      i.id === id ||
+      i.id === decodedId ||
+      i.storageFileName === id ||
+      i.storageFileName === decodedId ||
+      i.fileName === id ||
+      i.fileName === decodedId ||
+      (i.storageFileName && i.storageFileName.includes(id))
+  );
 
-  if (!item || !item.storageFileName) {
+  if (!item) {
+    // Check if directly a filename in uploads dir
+    const directPath = path.join(UPLOADS_DIR, decodedId);
+    if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      return res.download(directPath, decodedId);
+    }
     return res.status(404).send("File not found.");
   }
 
-  const filePath = path.join(UPLOADS_DIR, item.storageFileName);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("File missing from storage.");
+  // If external / Google Drive link
+  if (item.officialDownloadUrl) {
+    return res.redirect(item.officialDownloadUrl);
   }
 
-  item.downloadCount = (item.downloadCount || 0) + 1;
-  writeResourcesMetadata(items);
+  // If physical stored file
+  if (item.storageFileName) {
+    let filePath = path.join(UPLOADS_DIR, item.storageFileName);
+    if (!fs.existsSync(filePath)) {
+      // Search directory for fallback matching name
+      try {
+        const allFiles = fs.readdirSync(UPLOADS_DIR);
+        const match = allFiles.find(
+          (f) => f.includes(item.id) || (item.fileName && f.endsWith(item.fileName))
+        );
+        if (match) {
+          filePath = path.join(UPLOADS_DIR, match);
+        }
+      } catch {}
+    }
 
-  res.download(filePath, item.fileName || "download");
-});
+    if (fs.existsSync(filePath)) {
+      item.downloadCount = (item.downloadCount || 0) + 1;
+      writeResourcesMetadata(items);
+
+      const downloadName = item.fileName || "download";
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+      if (item.mimeType) {
+        res.setHeader("Content-Type", item.mimeType);
+      }
+      return res.download(filePath, downloadName, (err) => {
+        if (err && !res.headersSent) {
+          console.error("Error during res.download:", err);
+          res.status(500).send("Error streaming file.");
+        }
+      });
+    }
+  }
+
+  // If raw content (e.g. scripts or text)
+  if (item.rawContent) {
+    item.downloadCount = (item.downloadCount || 0) + 1;
+    writeResourcesMetadata(items);
+    const downloadName = item.fileName || `${item.id}.txt`;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
+    res.setHeader("Content-Type", item.mimeType || "text/plain; charset=utf-8");
+    return res.send(item.rawContent);
+  }
+
+  return res.status(404).send("File missing from storage.");
+};
+
+apiRouter.get("/resources/file/:id", handleFileDownload);
+apiRouter.get("/resources/download/:id", handleFileDownload);
 
 // 5. Media streaming preview
 apiRouter.get("/resources/media/:id", (req: Request, res: Response) => {
   const { id } = req.params;
+  const decodedId = decodeURIComponent(id || "");
   const items = readResourcesMetadata();
-  const item = items.find((i) => i.id === id);
+  const item = items.find(
+    (i) =>
+      i.id === id ||
+      i.id === decodedId ||
+      i.storageFileName === id ||
+      (i.storageFileName && i.storageFileName.includes(id))
+  );
 
   if (!item || !item.storageFileName) {
     return res.status(404).send("Media not found.");
@@ -356,10 +425,15 @@ apiRouter.get("/resources/media/:id", (req: Request, res: Response) => {
     return res.status(404).send("Media file missing from storage.");
   }
 
+  res.setHeader("Access-Control-Allow-Origin", "*");
   if (item.mimeType) {
     res.setHeader("Content-Type", item.mimeType);
   }
-  res.sendFile(filePath);
+  res.sendFile(filePath, { acceptRanges: true }, (err) => {
+    if (err && !res.headersSent) {
+      console.warn("Media streaming error:", err);
+    }
+  });
 });
 
 // 6. Delete a community resource
