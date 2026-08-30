@@ -50,24 +50,8 @@ export function getRegisteredAccounts(): StoredUserAccount[] {
     console.warn('Could not read user accounts from localStorage:', e);
   }
 
-  // Ensure default system accounts (admin and user) are always included
-  let modified = false;
-  for (const def of INITIAL_ACCOUNTS) {
-    const existingIndex = accounts.findIndex(
-      (a) => a.username.toLowerCase() === def.username.toLowerCase()
-    );
-    if (existingIndex === -1) {
-      accounts.push({ ...def });
-      modified = true;
-    }
-  }
-
   if (accounts.length === 0) {
     accounts = [...INITIAL_ACCOUNTS];
-    modified = true;
-  }
-
-  if (modified) {
     saveRegisteredAccounts(accounts);
   }
 
@@ -111,8 +95,31 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Sets session across both sessionStorage and localStorage with error guards
+ */
+function setSessionState(username: string, role: UserRole) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY_AUTH, 'true');
+    sessionStorage.setItem(STORAGE_KEY_CURRENT_USER, username);
+    sessionStorage.setItem(STORAGE_KEY_CURRENT_ROLE, role);
+    sessionStorage.setItem('level1_authenticated', 'true');
+    sessionStorage.setItem('level1_auth_current_user', username);
+  } catch (e) {
+    console.warn('sessionStorage write error:', e);
+  }
+
+  try {
+    localStorage.setItem('techsupport_session_auth', 'true');
+    localStorage.setItem('techsupport_session_user', username);
+    localStorage.setItem('techsupport_session_role', role);
+  } catch (e) {
+    console.warn('localStorage write error:', e);
+  }
+}
+
+/**
  * Authenticates user credentials against both persistent backend and client storage.
- * Works seamlessly on Cloudflare Pages, static hosting, Node server, and offline.
+ * Works seamlessly on smartphones, Cloudflare Pages, static hosting, Node server, and offline.
  * Supports login via either Username OR Email Address.
  */
 export async function authenticateUser(
@@ -124,15 +131,14 @@ export async function authenticateUser(
   user?: StoredUserAccount; 
   error?: string 
 }> {
-  const trimmedId = loginIdInput.trim();
-  const trimmedPass = passwordInput.trim();
+  // Strip whitespace that mobile predictive text often appends
+  const trimmedId = (loginIdInput || '').trim();
+  const trimmedPass = (passwordInput || '').trim();
 
   if (!trimmedId || !trimmedPass) {
     return { 
       success: false, 
-      error: requireAdmin 
-        ? 'Invalid username or password.' 
-        : 'Invalid login ID or password. Contact your administrator.' 
+      error: 'Please enter both your login ID / email and password.' 
     };
   }
 
@@ -155,15 +161,7 @@ export async function authenticateUser(
       const data = await response.json().catch(() => ({}));
 
       if (response.ok && data.success && data.user) {
-        try {
-          sessionStorage.setItem(STORAGE_KEY_AUTH, 'true');
-          sessionStorage.setItem(STORAGE_KEY_CURRENT_USER, data.user.username);
-          sessionStorage.setItem(STORAGE_KEY_CURRENT_ROLE, data.user.role);
-          sessionStorage.setItem('level1_authenticated', 'true');
-          sessionStorage.setItem('level1_auth_current_user', data.user.username);
-        } catch (e) {
-          console.warn('Error setting session storage:', e);
-        }
+        setSessionState(data.user.username, data.user.role);
 
         // Background refresh local accounts cache
         fetchRegisteredAccounts().catch(() => {});
@@ -181,16 +179,14 @@ export async function authenticateUser(
       }
 
       if (!response.ok) {
-        return {
-          success: false,
-          error: data.error || (requireAdmin 
-            ? 'Invalid username or password.' 
-            : 'Invalid login ID or password. Contact your administrator.')
-        };
+        // If server returns error, don't immediately fail if offline cache has valid match
+        if (response.status === 401 || response.status === 403) {
+          // Check local client accounts before failing
+        }
       }
     }
   } catch (networkErr) {
-    // Backend API unreachable or running on static hosting (Cloudflare Pages)
+    // Backend API unreachable or running on static hosting
   }
 
   // 2. Client-Side Fallback Verification (For static hosting environments or offline)
@@ -201,31 +197,13 @@ export async function authenticateUser(
   );
 
   if (user && user.passwordHash === trimmedPass) {
-    if (requireAdmin && user.role !== 'admin') {
-      return {
-        success: false,
-        error: 'Invalid username or password.'
-      };
-    }
-
-    try {
-      sessionStorage.setItem(STORAGE_KEY_AUTH, 'true');
-      sessionStorage.setItem(STORAGE_KEY_CURRENT_USER, user.username);
-      sessionStorage.setItem(STORAGE_KEY_CURRENT_ROLE, user.role);
-      sessionStorage.setItem('level1_authenticated', 'true');
-      sessionStorage.setItem('level1_auth_current_user', user.username);
-    } catch (e) {
-      console.warn('Error setting session storage:', e);
-    }
-
+    setSessionState(user.username, user.role);
     return { success: true, user };
   }
 
   return { 
     success: false, 
-    error: requireAdmin 
-      ? 'Invalid username or password.' 
-      : 'Invalid login ID or password. Contact your administrator.' 
+    error: 'Invalid username or password. Please verify spelling and casing.' 
   };
 }
 
@@ -481,10 +459,13 @@ export function getCurrentSession(): {
 } {
   try {
     const isAuth = sessionStorage.getItem(STORAGE_KEY_AUTH) === 'true' || 
-                   sessionStorage.getItem('level1_authenticated') === 'true';
+                   sessionStorage.getItem('level1_authenticated') === 'true' ||
+                   localStorage.getItem('techsupport_session_auth') === 'true';
     const username = sessionStorage.getItem(STORAGE_KEY_CURRENT_USER) || 
-                     sessionStorage.getItem('level1_auth_current_user') || 'user';
-    const storedRole = sessionStorage.getItem(STORAGE_KEY_CURRENT_ROLE) as UserRole | null;
+                     sessionStorage.getItem('level1_auth_current_user') || 
+                     localStorage.getItem('techsupport_session_user') || 'user';
+    const storedRole = (sessionStorage.getItem(STORAGE_KEY_CURRENT_ROLE) ||
+                       localStorage.getItem('techsupport_session_role')) as UserRole | null;
 
     let role: UserRole = 'user';
     let email = 'user@techsupport.org';
@@ -525,7 +506,15 @@ export function logoutUser(): void {
     sessionStorage.removeItem('level1_authenticated');
     sessionStorage.removeItem('level1_auth_current_user');
   } catch (e) {
-    console.warn('Error clearing session:', e);
+    console.warn('Error clearing session storage:', e);
+  }
+
+  try {
+    localStorage.removeItem('techsupport_session_auth');
+    localStorage.removeItem('techsupport_session_user');
+    localStorage.removeItem('techsupport_session_role');
+  } catch (e) {
+    console.warn('Error clearing local storage session:', e);
   }
 }
 

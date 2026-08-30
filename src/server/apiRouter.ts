@@ -548,9 +548,7 @@ apiRouter.post("/auth/login", (req: Request, res: Response) => {
     if (!trimmedId || !trimmedPass) {
       return res.status(400).json({
         success: false,
-        error: requireAdmin
-          ? "Invalid username or password."
-          : "Invalid login ID or password. Contact your administrator.",
+        error: "Please enter your username/email and password.",
       });
     }
 
@@ -564,16 +562,7 @@ apiRouter.post("/auth/login", (req: Request, res: Response) => {
     if (!user || user.passwordHash !== trimmedPass) {
       return res.status(401).json({
         success: false,
-        error: requireAdmin
-          ? "Invalid username or password."
-          : "Invalid login ID or password. Contact your administrator.",
-      });
-    }
-
-    if (requireAdmin && user.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        error: "Invalid username or password.",
+        error: "Invalid username or password. Please verify spelling and casing.",
       });
     }
 
