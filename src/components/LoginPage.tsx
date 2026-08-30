@@ -219,6 +219,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </p>
             )}
 
+            {/* Quick Demo Credentials Autofill Helper */}
+            <div className="pt-1 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Default login:</span>
+              {loginType === 'admin' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginId('admin');
+                    setPassword('admin123');
+                    setErrorMsg('');
+                  }}
+                  className="text-indigo-400 hover:text-indigo-300 dark:text-cyan-400 dark:hover:text-cyan-300 font-semibold cursor-pointer underline underline-offset-2"
+                >
+                  Use admin / admin123
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginId('user');
+                    setPassword('user123');
+                    setErrorMsg('');
+                  }}
+                  className="text-blue-400 hover:text-blue-300 dark:text-cyan-400 dark:hover:text-cyan-300 font-semibold cursor-pointer underline underline-offset-2"
+                >
+                  Use user / user123
+                </button>
+              )}
+            </div>
+
             {/* Submit Button */}
             <button
               type="submit"
