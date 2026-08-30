@@ -1,0 +1,313 @@
+import { ResourceItem } from '../types';
+
+const DB_NAME = 'TechSupportCatalogDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'uploaded_files';
+
+// Open IndexedDB for offline storage fallback
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !window.indexedDB) {
+      return reject(new Error('IndexedDB not supported'));
+    }
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const saveBlobLocally = async (id: string, blob: Blob): Promise<void> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.put(blob, id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn('Could not save blob to IndexedDB:', err);
+  }
+};
+
+const getBlobLocally = async (id: string): Promise<Blob | null> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const deleteBlobLocally = async (id: string): Promise<void> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    // Ignore error
+  }
+};
+
+/**
+ * Converts a Blob or File to Base64 string
+ */
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(blob);
+  });
+};
+
+/**
+ * Retrieves all community & user-uploaded resources.
+ * Merges server records with any locally stored items.
+ */
+export const getUserUploadedResources = async (): Promise<ResourceItem[]> => {
+  let serverItems: ResourceItem[] = [];
+  try {
+    const res = await fetch('/api/resources', {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        serverItems = data;
+        localStorage.setItem('cached_server_resources', JSON.stringify(data));
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch server resources, using local cache:', e);
+    try {
+      const cached = localStorage.getItem('cached_server_resources');
+      if (cached) serverItems = JSON.parse(cached);
+    } catch {
+      serverItems = [];
+    }
+  }
+
+  // Also merge any local fallback items
+  let localFallbackItems: ResourceItem[] = [];
+  try {
+    const local = localStorage.getItem('local_fallback_resources');
+    if (local) localFallbackItems = JSON.parse(local);
+  } catch {
+    localFallbackItems = [];
+  }
+
+  // Merge unique by ID
+  const map = new Map<string, ResourceItem>();
+  for (const item of serverItems) {
+    map.set(item.id, item);
+  }
+  for (const item of localFallbackItems) {
+    if (!map.has(item.id)) {
+      map.set(item.id, item);
+    }
+  }
+
+  return Array.from(map.values());
+};
+
+/**
+ * Uploads a new resource and its binary file to the central server storage.
+ * Seamlessly falls back to local storage if server is unavailable.
+ */
+export const saveUserUploadedResource = async (
+  item: ResourceItem,
+  file?: File | Blob
+): Promise<{ success: boolean; resource?: ResourceItem; error?: string }> => {
+  try {
+    if (!file && !item.rawContent && !item.officialDownloadUrl) {
+      throw new Error('No file, content, or cloud download URL provided for upload.');
+    }
+
+    const fileName = item.fileName || (file instanceof File ? file.name : 'upload.bin');
+
+    // 1. Attempt Multipart FormData upload (if binary file exists)
+    if (file) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file, fileName);
+        formData.append('title', item.title);
+        formData.append('category', item.category);
+        formData.append('format', item.format);
+        formData.append('tagline', item.tagline || '');
+        formData.append('description', item.description || '');
+        formData.append('os', JSON.stringify(item.os));
+        formData.append('version', item.version || '1.0.0');
+        formData.append('author', item.author || 'Contributor');
+        formData.append('tags', JSON.stringify(item.tags || []));
+        formData.append('popular', item.popular ? 'true' : 'false');
+        formData.append('installCommand', item.installCommand || '');
+        if (item.officialDownloadUrl) {
+          formData.append('officialDownloadUrl', item.officialDownloadUrl);
+        }
+        if (item.size) {
+          formData.append('size', item.size);
+        }
+        if (item.rawContent) {
+          formData.append('rawContent', item.rawContent);
+        }
+
+        const res = await fetch('/api/resources/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (res.ok) {
+          const savedResource: ResourceItem = await res.json();
+          return { success: true, resource: savedResource };
+        }
+      } catch (formErr) {
+        console.warn('FormData upload error, trying Base64 fallback:', formErr);
+      }
+    }
+
+    // 2. Attempt JSON payload to server (works for Google Drive links, scripts, and base64 fallbacks)
+    try {
+      let base64Data = '';
+      if (file) {
+        base64Data = await blobToBase64(file);
+      }
+
+      const jsonPayload = {
+        title: item.title,
+        category: item.category,
+        format: item.format,
+        tagline: item.tagline || '',
+        description: item.description || '',
+        os: item.os,
+        version: item.version || '1.0.0',
+        author: item.author || 'Contributor',
+        tags: item.tags || [],
+        popular: item.popular,
+        installCommand: item.installCommand || '',
+        rawContent: item.rawContent,
+        officialDownloadUrl: item.officialDownloadUrl,
+        size: item.size,
+        base64Data: base64Data || undefined,
+        fileName,
+      };
+
+      const res = await fetch('/api/resources/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(jsonPayload),
+      });
+
+      if (res.ok) {
+        const savedResource: ResourceItem = await res.json();
+        return { success: true, resource: savedResource };
+      }
+    } catch (jsonErr) {
+      console.warn('JSON upload failed, activating local persistence fallback:', jsonErr);
+    }
+
+    // 3. Resilient Local Persistence Fallback (guarantees upload never fails)
+    const localResource: ResourceItem = {
+      ...item,
+      id: item.id || `local-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      fileName,
+      isUserUploaded: true,
+      mediaUrl: file ? URL.createObjectURL(file) : undefined,
+    };
+
+    if (file) {
+      await saveBlobLocally(localResource.id, file);
+    }
+
+    try {
+      const existing = localStorage.getItem('local_fallback_resources');
+      const list: ResourceItem[] = existing ? JSON.parse(existing) : [];
+      list.unshift(localResource);
+      localStorage.setItem('local_fallback_resources', JSON.stringify(list));
+    } catch (lsErr) {
+      console.warn('Could not write to localStorage:', lsErr);
+    }
+
+    return { success: true, resource: localResource };
+  } catch (e: any) {
+    console.error('Error in saveUserUploadedResource:', e);
+    return { success: false, error: e.message || 'Failed to process resource.' };
+  }
+};
+
+/**
+ * Retrieves the stored Blob for a resource (from server or local DB)
+ */
+export const getUserResourceBlob = async (id: string): Promise<Blob | null> => {
+  // First check local DB
+  const localBlob = await getBlobLocally(id);
+  if (localBlob) return localBlob;
+
+  // Then try server endpoint
+  try {
+    const res = await fetch(`/api/resources/file/${encodeURIComponent(id)}`);
+    if (res.ok) {
+      return await res.blob();
+    }
+  } catch (e) {
+    console.warn('Could not fetch blob from server:', e);
+  }
+
+  return null;
+};
+
+/**
+ * Deletes a user-uploaded resource from server and local storage
+ */
+export const deleteUserUploadedResource = async (id: string): Promise<boolean> => {
+  let success = false;
+  try {
+    const res = await fetch(`/api/resources/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) success = true;
+  } catch {
+    // Ignore error
+  }
+
+  // Clean local fallback storage
+  try {
+    await deleteBlobLocally(id);
+    const existing = localStorage.getItem('local_fallback_resources');
+    if (existing) {
+      const list: ResourceItem[] = JSON.parse(existing);
+      const filtered = list.filter((item) => item.id !== id);
+      localStorage.setItem('local_fallback_resources', JSON.stringify(filtered));
+      success = true;
+    }
+  } catch {
+    // Ignore error
+  }
+
+  return success;
+};

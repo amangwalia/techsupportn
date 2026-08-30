@@ -1,0 +1,6 @@
+{
+  "name": "Tech Support",
+  "description": "Tech Support — A curated library of developer files, starter kits, cheat sheets, configs, scripts, and technical support tools with 1-click downloads.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

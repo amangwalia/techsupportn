@@ -1,0 +1,109 @@
+[
+  {
+    "id": "comm-1788018703113-sjbgn",
+    "title": "Sample Binary",
+    "tagline": "Download sample.bin",
+    "description": "Community uploaded sample.bin",
+    "category": "apps",
+    "os": [
+      "Cross-Platform"
+    ],
+    "format": "BIN",
+    "size": "22 B",
+    "version": "1.0.0",
+    "updatedDate": "Aug 2026",
+    "sha256": "bd66bd9170d6c9eea42cdceff2fee650711abbb18ac5bd76e726f785efadea4a",
+    "popular": false,
+    "recentlyAdded": true,
+    "downloadCount": 1,
+    "license": "Community / Open",
+    "author": "Community Contributor",
+    "tags": [
+      "BIN",
+      "Community Upload"
+    ],
+    "fileName": "sample.bin",
+    "storageFileName": "1788018703106-hwia7n_sample.bin",
+    "installCommand": "sample.bin",
+    "isUserUploaded": true,
+    "mediaType": "binary",
+    "mediaUrl": "/api/resources/media/comm-1788018703113-sjbgn",
+    "mimeType": "application/octet-stream",
+    "installGuide": [
+      "Download sample.bin via 1-click download.",
+      "Open, install or execute the file."
+    ]
+  },
+  {
+    "id": "comm-1788018700303-d6rj1",
+    "title": "Test JSON",
+    "tagline": "Download test.txt",
+    "description": "Community uploaded test.txt",
+    "category": "apps",
+    "os": [
+      "Cross-Platform"
+    ],
+    "format": "TXT",
+    "size": "11 B",
+    "version": "1.0.0",
+    "updatedDate": "Aug 2026",
+    "sha256": "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c",
+    "popular": false,
+    "recentlyAdded": true,
+    "downloadCount": 1,
+    "license": "Community / Open",
+    "author": "Community Contributor",
+    "tags": [
+      "TXT",
+      "Community Upload"
+    ],
+    "fileName": "test.txt",
+    "storageFileName": "1788018700303-pdvrd0_test.txt",
+    "installCommand": "test.txt",
+    "isUserUploaded": true,
+    "mediaType": "binary",
+    "mediaUrl": "/api/resources/media/comm-1788018700303-d6rj1",
+    "mimeType": "application/octet-stream",
+    "installGuide": [
+      "Download test.txt via 1-click download.",
+      "Open, install or execute the file."
+    ]
+  },
+  {
+    "id": "comm-1788018342706-gjbai",
+    "title": "Clean",
+    "tagline": "Windows automation batch script",
+    "description": "Uploaded file: clean.bat (1.4 KB). Ready for standalone instant download.",
+    "category": "bat-files",
+    "os": [
+      "Windows"
+    ],
+    "format": "BAT",
+    "size": "1.4 KB",
+    "version": "1.0.0",
+    "updatedDate": "Aug 2026",
+    "sha256": "bda82d144370b4c19f4e4b8fcaf3c109c9f3e591bac9157e808a99b97083ab4b",
+    "popular": false,
+    "recentlyAdded": true,
+    "downloadCount": 1,
+    "license": "Community / Open",
+    "author": "My Upload",
+    "tags": [
+      "BAT",
+      "bat files",
+      "Windows"
+    ],
+    "fileName": "clean.bat",
+    "storageFileName": "1788018342698-a6fcsb_clean.bat",
+    "installCommand": "clean.bat",
+    "isUserUploaded": true,
+    "mediaType": "text",
+    "mediaUrl": "/api/resources/media/comm-1788018342706-gjbai",
+    "rawContent": "@echo off\r\ntitle Visible Temp Cleanup (Debug Mode)\r\ncolor 0E\r\n\r\necho =========================================\r\necho   TEMP CLEANUP - SHOWING ALL ACTIONS\r\necho =========================================\r\necho.\r\n\r\n:: Admin check\r\nnet session\r\nif %errorlevel% neq 0 (\r\n    echo.\r\n    echo ERROR: Not running as Administrator!\r\n    echo.\r\n    pause\r\n    exit /b\r\n)\r\n\r\n:: -------------------------------\r\n:: Windows Temp\r\n:: -------------------------------\r\necho.\r\necho ===== Cleaning C:\\Windows\\Temp =====\r\necho.\r\n\r\ndir \"C:\\Windows\\Temp\"\r\n\r\necho.\r\necho Deleting files...\r\ndel /f /s /q \"C:\\Windows\\Temp\\*\"\r\n\r\necho.\r\necho Removing folders...\r\nfor /d %%D in (\"C:\\Windows\\Temp\\*\") do (\r\n    echo Deleting folder: %%D\r\n    rd /s /q \"%%D\"\r\n)\r\n\r\n:: -------------------------------\r\n:: User Temp\r\n:: -------------------------------\r\necho.\r\necho ===== Cleaning %TEMP% =====\r\necho.\r\n\r\ndir \"%TEMP%\"\r\n\r\necho.\r\necho Deleting files...\r\ndel /f /s /q \"%TEMP%\\*\"\r\n\r\necho.\r\necho Removing folders...\r\nfor /d %%D in (\"%TEMP%\\*\") do (\r\n    echo Deleting folder: %%D\r\n    rd /s /q \"%%D\"\r\n)\r\n\r\n:: -------------------------------\r\n:: Prefetch\r\n:: -------------------------------\r\necho.\r\necho ===== Cleaning Prefetch =====\r\necho.\r\n\r\ndir \"%SystemRoot%\\Prefetch\"\r\n\r\necho.\r\necho Deleting files...\r\ndel /f /q \"%SystemRoot%\\Prefetch\\*\"\r\n\r\necho.\r\necho =========================================\r\necho   CLEANUP FINISHED - REVIEW ABOVE OUTPUT\r\necho =========================================\r\npause\r\n",
+    "mimeType": "application/octet-stream",
+    "installGuide": [
+      "Download clean.bat via 1-click download.",
+      "Open, install or execute the file."
+    ]
+  }
+]
