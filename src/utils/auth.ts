@@ -165,7 +165,7 @@ export async function authenticateUser(
           console.warn('Error setting session storage:', e);
         }
 
-        // Background refresh local accounts
+        // Background refresh local accounts cache
         fetchRegisteredAccounts().catch(() => {});
 
         return { 
@@ -179,12 +179,21 @@ export async function authenticateUser(
           }
         };
       }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || (requireAdmin 
+            ? 'Invalid username or password.' 
+            : 'Invalid login ID or password. Contact your administrator.')
+        };
+      }
     }
   } catch (networkErr) {
     // Backend API unreachable or running on static hosting (Cloudflare Pages)
   }
 
-  // 2. Client-Side Verification (Works 100% on Cloudflare Pages, static hosting, or offline)
+  // 2. Client-Side Fallback Verification (For static hosting environments or offline)
   const accounts = getRegisteredAccounts();
   const lowerId = trimmedId.toLowerCase();
   const user = accounts.find(
@@ -210,30 +219,6 @@ export async function authenticateUser(
     }
 
     return { success: true, user };
-  }
-
-  // 3. Guaranteed Hardcoded Fallback for default admin and user
-  const defaultMatch = INITIAL_ACCOUNTS.find(
-    (a) => (a.username.toLowerCase() === lowerId || a.email.toLowerCase() === lowerId) && a.passwordHash === trimmedPass
-  );
-
-  if (defaultMatch) {
-    if (requireAdmin && defaultMatch.role !== 'admin') {
-      return {
-        success: false,
-        error: 'Invalid username or password.'
-      };
-    }
-
-    try {
-      sessionStorage.setItem(STORAGE_KEY_AUTH, 'true');
-      sessionStorage.setItem(STORAGE_KEY_CURRENT_USER, defaultMatch.username);
-      sessionStorage.setItem(STORAGE_KEY_CURRENT_ROLE, defaultMatch.role);
-      sessionStorage.setItem('level1_authenticated', 'true');
-      sessionStorage.setItem('level1_auth_current_user', defaultMatch.username);
-    } catch (e) {}
-
-    return { success: true, user: defaultMatch };
   }
 
   return { 
