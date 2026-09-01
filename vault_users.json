@@ -1,0 +1,16 @@
+[
+  {
+    "username": "admin",
+    "role": "admin",
+    "displayName": "Administrator",
+    "email": "admin@techsupport.org",
+    "passwordHash": "admin123"
+  },
+  {
+    "username": "user",
+    "role": "user",
+    "displayName": "Community Member",
+    "email": "user@techsupport.org",
+    "passwordHash": "user123"
+  }
+]
