@@ -1,4 +1,4 @@
-import { ResourceItem, StorageUsageInfo } from '../types';
+import { ResourceItem, StorageUsageInfo, UploadProgressInfo } from '../types';
 
 export const MAX_STORAGE_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB (4,294,967,296 bytes)
 
@@ -7,6 +7,19 @@ export const formatByteSize = (bytes: number): string => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 2 : 1)} ${units[i]}`;
+};
+
+export const formatEtaTime = (seconds: number): string => {
+  if (seconds <= 0) return '< 1s left';
+  if (seconds < 60) return `${Math.round(seconds)}s left`;
+  const mins = Math.floor(seconds / 60);
+  const remainingSecs = Math.round(seconds % 60);
+  if (mins < 60) {
+    return remainingSecs > 0 ? `${mins}m ${remainingSecs}s left` : `${mins}m left`;
+  }
+  const hours = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  return `${hours}h ${remainingMins}m left`;
 };
 
 export const parseSizeStringToBytes = (sizeStr?: string): number => {
@@ -196,76 +209,226 @@ export const getUserUploadedResources = async (): Promise<ResourceItem[]> => {
 
 /**
  * Uploads a new resource and its binary file to the central server storage.
+ * Seamlessly tracks live upload percentage, transfer speed, bytes uploaded, and remaining time.
  * Seamlessly falls back to local storage if server is unavailable.
  */
 export const saveUserUploadedResource = async (
   item: ResourceItem,
-  file?: File | Blob
-): Promise<{ success: boolean; resource?: ResourceItem; error?: string }> => {
+  file?: File | Blob,
+  onProgress?: (progress: UploadProgressInfo) => void,
+  cancelRef?: { current?: (() => void) | null }
+): Promise<{ success: boolean; resource?: ResourceItem; error?: string; isCancelled?: boolean }> => {
   try {
     if (!file && !item.rawContent && !item.officialDownloadUrl) {
       throw new Error('No file, content, or cloud download URL provided for upload.');
     }
 
     const fileName = item.fileName || (file instanceof File ? file.name : 'upload.bin');
+    const fileSize = file ? file.size : item.rawContent ? new TextEncoder().encode(item.rawContent).length : 1024;
 
-    // 1. Attempt Multipart FormData upload (if binary file exists)
+    // Report initial progress
+    if (onProgress) {
+      onProgress({
+        loaded: 0,
+        total: fileSize,
+        percentage: 0,
+        speedBytesPerSec: 0,
+        formattedLoaded: '0 B',
+        formattedTotal: formatByteSize(fileSize),
+        formattedSpeed: '0 B/s',
+        timeRemainingSeconds: 0,
+        formattedTimeRemaining: 'Preparing upload...',
+        status: 'uploading'
+      });
+    }
+
+    // 1. Attempt Multipart FormData upload with real-time XHR progress tracking
     if (file) {
-      try {
-        const formData = new FormData();
-        formData.append('file', file, fileName);
-        formData.append('title', item.title);
-        formData.append('category', item.category);
-        formData.append('format', item.format);
-        formData.append('tagline', item.tagline || '');
-        formData.append('description', item.description || '');
-        formData.append('os', JSON.stringify(item.os));
-        formData.append('version', item.version || '1.0.0');
-        formData.append('author', item.author || 'Contributor');
-        formData.append('tags', JSON.stringify(item.tags || []));
-        formData.append('popular', item.popular ? 'true' : 'false');
-        formData.append('installCommand', item.installCommand || '');
-        if (item.officialDownloadUrl) {
-          formData.append('officialDownloadUrl', item.officialDownloadUrl);
-        }
-        if (item.size) {
-          formData.append('size', item.size);
-        }
-        if (item.rawContent) {
-          formData.append('rawContent', item.rawContent);
-        }
+      const uploadResult = await new Promise<{ success: boolean; resource?: ResourceItem; error?: string; isCancelled?: boolean }>((resolve) => {
+        try {
+          const formData = new FormData();
+          formData.append('file', file, fileName);
+          formData.append('title', item.title);
+          formData.append('category', item.category);
+          formData.append('format', item.format);
+          formData.append('tagline', item.tagline || '');
+          formData.append('description', item.description || '');
+          formData.append('os', JSON.stringify(item.os));
+          formData.append('version', item.version || '1.0.0');
+          formData.append('author', item.author || 'Contributor');
+          formData.append('tags', JSON.stringify(item.tags || []));
+          formData.append('popular', item.popular ? 'true' : 'false');
+          formData.append('installCommand', item.installCommand || '');
+          if (item.officialDownloadUrl) {
+            formData.append('officialDownloadUrl', item.officialDownloadUrl);
+          }
+          if (item.size) {
+            formData.append('size', item.size);
+          }
+          if (item.rawContent) {
+            formData.append('rawContent', item.rawContent);
+          }
 
-        const res = await fetch('/api/resources/upload', {
-          method: 'POST',
-          body: formData,
-        });
+          const xhr = new XMLHttpRequest();
+          const startTime = Date.now();
 
-        if (res.ok) {
-          const savedResource: ResourceItem = await res.json();
-          // Cache in IndexedDB for immediate local retrieval
-          if (file) {
-            saveBlobLocally(savedResource.id, file).catch(() => {});
-            if (item.id && item.id !== savedResource.id) {
-              saveBlobLocally(item.id, file).catch(() => {});
+          // Bind cancel handler
+          if (cancelRef) {
+            cancelRef.current = () => {
+              try {
+                xhr.abort();
+              } catch (e) {
+                console.warn('Error aborting XHR:', e);
+              }
+            };
+          }
+
+          xhr.onabort = () => {
+            if (onProgress) {
+              onProgress({
+                loaded: 0,
+                total: fileSize,
+                percentage: 0,
+                speedBytesPerSec: 0,
+                formattedLoaded: '0 B',
+                formattedTotal: formatByteSize(fileSize),
+                formattedSpeed: '0 B/s',
+                timeRemainingSeconds: 0,
+                formattedTimeRemaining: 'Upload cancelled',
+                status: 'cancelled'
+              });
             }
-          }
-          return { success: true, resource: savedResource };
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          if (res.status === 413 || errData.code === 'STORAGE_LIMIT_EXCEEDED' || errData.error?.includes('Storage')) {
-            return { success: false, error: errData.error || 'Storage capacity limit of 4 GB exceeded.' };
-          }
+            resolve({ success: false, error: 'Upload cancelled by user.', isCancelled: true });
+          };
+
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && event.total > 0) {
+              const now = Date.now();
+              const elapsedTotalSec = Math.max(0.1, (now - startTime) / 1000);
+              const loaded = event.loaded;
+              const total = event.total;
+              const percentage = Math.min(99, Math.round((loaded / total) * 100));
+
+              // Speed & ETA calculation
+              const speedBytesPerSec = loaded / elapsedTotalSec;
+              const remainingBytes = Math.max(0, total - loaded);
+              const timeRemainingSeconds = speedBytesPerSec > 0 ? Math.ceil(remainingBytes / speedBytesPerSec) : 0;
+
+              if (onProgress) {
+                onProgress({
+                  loaded,
+                  total,
+                  percentage,
+                  speedBytesPerSec,
+                  formattedLoaded: formatByteSize(loaded),
+                  formattedTotal: formatByteSize(total),
+                  formattedSpeed: `${formatByteSize(speedBytesPerSec)}/s`,
+                  timeRemainingSeconds,
+                  formattedTimeRemaining: formatEtaTime(timeRemainingSeconds),
+                  status: 'uploading'
+                });
+              }
+            }
+          };
+
+          xhr.upload.onload = () => {
+            if (onProgress) {
+              onProgress({
+                loaded: fileSize,
+                total: fileSize,
+                percentage: 100,
+                speedBytesPerSec: 0,
+                formattedLoaded: formatByteSize(fileSize),
+                formattedTotal: formatByteSize(fileSize),
+                formattedSpeed: 'Processing...',
+                timeRemainingSeconds: 0,
+                formattedTimeRemaining: 'Saving & indexing on server...',
+                status: 'processing'
+              });
+            }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const savedResource: ResourceItem = JSON.parse(xhr.responseText);
+                if (file) {
+                  saveBlobLocally(savedResource.id, file).catch(() => {});
+                  if (item.id && item.id !== savedResource.id) {
+                    saveBlobLocally(item.id, file).catch(() => {});
+                  }
+                }
+                if (onProgress) {
+                  onProgress({
+                    loaded: fileSize,
+                    total: fileSize,
+                    percentage: 100,
+                    speedBytesPerSec: 0,
+                    formattedLoaded: formatByteSize(fileSize),
+                    formattedTotal: formatByteSize(fileSize),
+                    formattedSpeed: 'Done',
+                    timeRemainingSeconds: 0,
+                    formattedTimeRemaining: 'Upload Complete!',
+                    status: 'completed'
+                  });
+                }
+                resolve({ success: true, resource: savedResource });
+              } catch (parseErr) {
+                resolve({ success: false, error: 'Invalid response from server.' });
+              }
+            } else {
+              try {
+                const errData = JSON.parse(xhr.responseText);
+                if (xhr.status === 413 || errData.code === 'STORAGE_LIMIT_EXCEEDED' || errData.error?.includes('Storage')) {
+                  resolve({ success: false, error: errData.error || 'Storage capacity limit of 4 GB exceeded.' });
+                } else {
+                  resolve({ success: false, error: errData.error || `Server returned error (${xhr.status})` });
+                }
+              } catch {
+                resolve({ success: false, error: `Upload failed with status ${xhr.status}` });
+              }
+            }
+          };
+
+          xhr.onerror = () => {
+            resolve({ success: false, error: 'Network connection lost during file upload.' });
+          };
+
+          xhr.open('POST', '/api/resources/upload', true);
+          xhr.send(formData);
+        } catch (err: any) {
+          resolve({ success: false, error: err?.message || 'Failed to initialize file upload.' });
         }
-      } catch (formErr: any) {
-        if (formErr?.message?.includes('Storage')) {
-          return { success: false, error: formErr.message };
-        }
-        console.warn('FormData upload error, trying Base64 fallback:', formErr);
+      });
+
+      if (uploadResult.isCancelled) {
+        return uploadResult;
+      }
+      if (uploadResult.success) {
+        return uploadResult;
+      }
+      if (uploadResult.error && (uploadResult.error.includes('Storage') || uploadResult.error.includes('capacity'))) {
+        return uploadResult;
       }
     }
 
     // 2. Attempt JSON payload to server (works for Google Drive links, scripts, and base64 fallbacks)
     try {
+      if (onProgress) {
+        onProgress({
+          loaded: Math.round(fileSize * 0.5),
+          total: fileSize,
+          percentage: 50,
+          speedBytesPerSec: 0,
+          formattedLoaded: formatByteSize(fileSize * 0.5),
+          formattedTotal: formatByteSize(fileSize),
+          formattedSpeed: 'Publishing...',
+          timeRemainingSeconds: 1,
+          formattedTimeRemaining: 'Publishing to cloud catalog...',
+          status: 'uploading'
+        });
+      }
+
       let base64Data = '';
       if (file) {
         base64Data = await blobToBase64(file);
@@ -301,6 +464,20 @@ export const saveUserUploadedResource = async (
 
       if (res.ok) {
         const savedResource: ResourceItem = await res.json();
+        if (onProgress) {
+          onProgress({
+            loaded: fileSize,
+            total: fileSize,
+            percentage: 100,
+            speedBytesPerSec: 0,
+            formattedLoaded: formatByteSize(fileSize),
+            formattedTotal: formatByteSize(fileSize),
+            formattedSpeed: 'Done',
+            timeRemainingSeconds: 0,
+            formattedTimeRemaining: 'Upload Complete!',
+            status: 'completed'
+          });
+        }
         return { success: true, resource: savedResource };
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -335,6 +512,21 @@ export const saveUserUploadedResource = async (
       localStorage.setItem('local_fallback_resources', JSON.stringify(list));
     } catch (lsErr) {
       console.warn('Could not write to localStorage:', lsErr);
+    }
+
+    if (onProgress) {
+      onProgress({
+        loaded: fileSize,
+        total: fileSize,
+        percentage: 100,
+        speedBytesPerSec: 0,
+        formattedLoaded: formatByteSize(fileSize),
+        formattedTotal: formatByteSize(fileSize),
+        formattedSpeed: 'Done',
+        timeRemainingSeconds: 0,
+        formattedTimeRemaining: 'Saved locally',
+        status: 'completed'
+      });
     }
 
     return { success: true, resource: localResource };

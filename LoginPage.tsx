@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Lock, 
   User, 
@@ -10,10 +10,13 @@ import {
   AlertCircle, 
   CheckCircle2,
   LogIn,
-  Shield
+  Shield,
+  Clock,
+  ShieldAlert,
+  Timer
 } from 'lucide-react';
 import { TechSupportLogo } from './TechSupportLogo';
-import { authenticateUser, fetchRegisteredAccounts } from '../utils/auth';
+import { authenticateUser, fetchRegisteredAccounts, getLockoutState, LockoutState } from '../utils/auth';
 import { UserRole } from '../types';
 
 interface LoginPageProps {
@@ -31,16 +34,82 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   
   const [errorMsg, setErrorMsg] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [successToast, setSuccessToast] = useState('');
 
+  // Progressive Lockout State
+  const [lockoutState, setLockoutState] = useState<LockoutState>(() => getLockoutState());
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync lockout state from storage on mount
   useEffect(() => {
     fetchRegisteredAccounts().catch(() => {});
+    const initial = getLockoutState();
+    setLockoutState(initial);
+    if (initial.isLocked && initial.remainingSeconds > 0) {
+      setRemainingSeconds(initial.remainingSeconds);
+    }
   }, []);
+
+  // Live real-time 1-second countdown ticker when locked
+  useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (lockoutState.lockedUntil && lockoutState.lockedUntil > Date.now()) {
+      const updateTimer = () => {
+        const now = Date.now();
+        const diffMs = (lockoutState.lockedUntil || 0) - now;
+        if (diffMs <= 0) {
+          setRemainingSeconds(0);
+          setLockoutState(prev => ({
+            ...prev,
+            isLocked: false,
+            lockedUntil: null,
+            remainingSeconds: 0,
+          }));
+          setErrorMsg('');
+          setInfoMsg('Lockout timer expired. You can now try signing in again.');
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+        } else {
+          setRemainingSeconds(Math.ceil(diffMs / 1000));
+        }
+      };
+
+      updateTimer();
+      timerRef.current = setInterval(updateTimer, 1000);
+    } else {
+      setRemainingSeconds(0);
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [lockoutState.lockedUntil]);
+
+  const isCurrentlyLocked = remainingSeconds > 0 || lockoutState.isLocked;
+
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCurrentlyLocked) return;
+
     setErrorMsg('');
+    setInfoMsg('');
     setLoading(true);
 
     const isAdminRequired = loginType === 'admin';
@@ -50,8 +119,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setLoading(false);
 
       if (result.success && result.user) {
+        setSuccessToast(`Welcome back, ${result.user.displayName || result.user.username}!`);
         onLoginSuccess(result.user.username, result.user.role);
       } else {
+        const latestLock = getLockoutState();
+        setLockoutState(latestLock);
+        if (latestLock.isLocked && latestLock.remainingSeconds > 0) {
+          setRemainingSeconds(latestLock.remainingSeconds);
+        }
+
         setErrorMsg(
           result.error ||
             (isAdminRequired
@@ -61,6 +137,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
     } catch (err: any) {
       setLoading(false);
+      const latestLock = getLockoutState();
+      setLockoutState(latestLock);
+      if (latestLock.isLocked && latestLock.remainingSeconds > 0) {
+        setRemainingSeconds(latestLock.remainingSeconds);
+      }
+
       setErrorMsg(
         isAdminRequired
           ? 'Invalid username or password.'
@@ -118,41 +200,91 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           <div className="grid grid-cols-2 p-1 liquid-glass-chip rounded-2xl text-xs font-semibold">
             <button
               type="button"
+              disabled={isCurrentlyLocked}
               onClick={() => {
                 setLoginType('member');
                 setErrorMsg('');
+                setInfoMsg('');
               }}
               className={`py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 loginType === 'member'
                   ? 'bg-white/90 dark:bg-slate-800/90 text-blue-600 dark:text-cyan-400 shadow-md font-bold'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-              }`}
+              } ${isCurrentlyLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <LogIn className="w-3.5 h-3.5" />
               <span>Member Login</span>
             </button>
             <button
               type="button"
+              disabled={isCurrentlyLocked}
               onClick={() => {
                 setLoginType('admin');
                 setErrorMsg('');
+                setInfoMsg('');
               }}
               className={`py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 loginType === 'admin'
                   ? 'bg-white/90 dark:bg-slate-800/90 text-indigo-600 dark:text-cyan-400 shadow-md font-bold'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-              }`}
+              } ${isCurrentlyLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Admin Login</span>
             </button>
           </div>
 
+          {/* Active Security Lockout Countdown Banner */}
+          {isCurrentlyLocked && (
+            <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-200 shadow-lg space-y-2.5 animate-in fade-in zoom-in-95 duration-200 backdrop-blur-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-rose-400 font-bold text-xs uppercase tracking-wider">
+                  <ShieldAlert className="w-4 h-4 animate-pulse text-rose-400" />
+                  <span>Security Lockout Active</span>
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-950/80 border border-rose-500/40 text-rose-300 font-mono text-xs font-bold shadow-inner">
+                  <Timer className="w-3.5 h-3.5 text-rose-400 animate-spin" style={{ animationDuration: '3s' }} />
+                  <span>{formatTimer(remainingSeconds)}</span>
+                </div>
+              </div>
+
+              <div className="text-xs text-rose-100/90 leading-relaxed">
+                {lockoutState.lockoutTier <= 1 ? (
+                  <p>
+                    <strong>5 incorrect attempts reached.</strong> Login access is locked for <strong>1 minute</strong> to protect system credentials.
+                  </p>
+                ) : (
+                  <p>
+                    <strong>Repeated failed attempts ({lockoutState.failedAttempts} total).</strong> Lockout duration increased to <strong>{lockoutState.lockoutTier} minutes</strong>.
+                  </p>
+                )}
+                <p className="text-[11px] text-rose-300/80 mt-1.5">
+                  Notice: Every subsequent wrong attempt will further increase the security cooldown timer.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Info Banner when timer expires */}
+          {infoMsg && !isCurrentlyLocked && (
+            <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-xs animate-in fade-in leading-relaxed backdrop-blur-xs">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+              <span>{infoMsg}</span>
+            </div>
+          )}
+
           {/* Error Message */}
-          {errorMsg && (
+          {errorMsg && !isCurrentlyLocked && (
             <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-rose-500/15 border border-rose-400/30 text-rose-600 dark:text-rose-300 text-xs animate-in fade-in leading-relaxed backdrop-blur-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
-              <span>{errorMsg}</span>
+              <div className="space-y-1">
+                <p>{errorMsg}</p>
+                {lockoutState.failedAttempts > 0 && lockoutState.failedAttempts < 5 && (
+                  <p className="text-[11px] text-rose-400/80 font-medium">
+                    Attempt {lockoutState.failedAttempts} of 5. (Temporary 1-minute lockout begins after 5 failures).
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -177,21 +309,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 {loginType === 'admin' ? 'Admin Login ID or Email' : 'Login ID or Email'}
               </label>
               <div className="relative flex items-center">
-                <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                {isCurrentlyLocked ? (
+                  <Lock className="w-4 h-4 text-rose-400 absolute left-3.5 pointer-events-none" />
+                ) : (
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                )}
                 <input
                   type="text"
                   value={loginId}
+                  disabled={isCurrentlyLocked || loading}
                   onChange={(e) => {
                     setLoginId(e.target.value);
                     if (errorMsg) setErrorMsg('');
                   }}
-                  placeholder={loginType === 'admin' ? 'Enter admin username or email' : 'Enter your username or email'}
+                  placeholder={
+                    isCurrentlyLocked
+                      ? `Locked (${formatTimer(remainingSeconds)})`
+                      : loginType === 'admin'
+                      ? 'Enter admin username or email'
+                      : 'Enter your username or email'
+                  }
                   required
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
                   autoComplete="username"
-                  className="w-full pl-10 pr-3.5 py-3 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-white/60 dark:border-white/10 text-slate-900 dark:text-slate-100 text-sm outline-none focus:border-blue-500 dark:focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(59,130,246,0.2)] transition placeholder:text-slate-400 backdrop-blur-xs"
+                  className={`w-full pl-10 pr-3.5 py-3 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-white/60 dark:border-white/10 text-slate-900 dark:text-slate-100 text-sm outline-none focus:border-blue-500 dark:focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(59,130,246,0.2)] transition placeholder:text-slate-400 backdrop-blur-xs ${
+                    isCurrentlyLocked ? 'opacity-50 cursor-not-allowed bg-slate-900/70 border-rose-500/30' : ''
+                  }`}
                 />
               </div>
             </div>
@@ -206,22 +351,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
+                  disabled={isCurrentlyLocked || loading}
                   onChange={(e) => {
                     setPassword(e.target.value);
                     if (errorMsg) setErrorMsg('');
                   }}
-                  placeholder={loginType === 'admin' ? 'Enter admin password' : 'Enter your password'}
+                  placeholder={
+                    isCurrentlyLocked
+                      ? 'Input disabled during lockout'
+                      : loginType === 'admin'
+                      ? 'Enter admin password'
+                      : 'Enter your password'
+                  }
                   required
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
                   autoComplete="current-password"
-                  className="w-full pl-10 pr-11 py-3 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-white/60 dark:border-white/10 text-slate-900 dark:text-slate-100 text-sm outline-none focus:border-blue-500 dark:focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(59,130,246,0.2)] transition placeholder:text-slate-400 backdrop-blur-xs"
+                  className={`w-full pl-10 pr-11 py-3 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-white/60 dark:border-white/10 text-slate-900 dark:text-slate-100 text-sm outline-none focus:border-blue-500 dark:focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(59,130,246,0.2)] transition placeholder:text-slate-400 backdrop-blur-xs ${
+                    isCurrentlyLocked ? 'opacity-50 cursor-not-allowed bg-slate-900/70 border-rose-500/30' : ''
+                  }`}
                 />
                 <button
                   type="button"
+                  disabled={isCurrentlyLocked}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-xl cursor-pointer touch-manipulation"
+                  className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-xl cursor-pointer touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed"
                   title={showPassword ? 'Hide password' : 'Show password'}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
@@ -231,7 +386,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
 
             {/* Member Notice */}
-            {loginType === 'member' && (
+            {loginType === 'member' && !isCurrentlyLocked && (
               <p className="text-[11px] text-slate-400 pt-0.5">
                 Need an account or password reset? Please contact your system administrator.
               </p>
@@ -240,13 +395,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading || !loginId || !password}
-              className={`w-full py-3 px-4 rounded-full liquid-glass-btn text-white font-bold text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2 mt-4 ${
-                loading || !loginId || !password ? 'opacity-60 cursor-not-allowed' : ''
+              disabled={isCurrentlyLocked || loading || !loginId || !password}
+              className={`w-full py-3 px-4 rounded-full liquid-glass-btn text-white font-bold text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2 mt-2 ${
+                isCurrentlyLocked
+                  ? 'bg-rose-900/40 border border-rose-500/30 text-rose-300 opacity-80 cursor-not-allowed'
+                  : loading || !loginId || !password
+                  ? 'opacity-60 cursor-not-allowed'
+                  : ''
               }`}
             >
-              <span>{loading ? 'Authenticating...' : loginType === 'admin' ? 'Sign In as Administrator' : 'Sign In as Member'}</span>
-              <ArrowRight className="w-4 h-4" />
+              {isCurrentlyLocked ? (
+                <>
+                  <Clock className="w-4 h-4 animate-spin text-rose-400" style={{ animationDuration: '4s' }} />
+                  <span>Locked: Try again in {formatTimer(remainingSeconds)}</span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {loading
+                      ? 'Authenticating...'
+                      : loginType === 'admin'
+                      ? 'Sign In as Administrator'
+                      : 'Sign In as Member'}
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
         </div>
@@ -254,9 +428,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         {/* Footer info */}
         <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500 px-2">
           <span>Tech Support Resource Vault</span>
-          <span className="text-[11px]">Secure Internal Directory</span>
+          <span className="text-[11px]">Security Protected Login</span>
         </div>
       </div>
     </div>
   );
 };
+

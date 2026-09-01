@@ -232,29 +232,31 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 </div>
 
-                {/* Storage Info Widget in Menu */}
-                <div className="mt-3 p-3 rounded-2xl bg-slate-50/60 dark:bg-slate-900/60 border border-slate-200/50 dark:border-white/5">
-                  <div className="flex items-center justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                    <span className="flex items-center gap-1.5">
-                      <HardDrive className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
-                      Vault Cloud Storage
-                    </span>
-                    <span className="font-semibold text-blue-600 dark:text-cyan-400 font-mono">
-                      {storageUsage ? storageUsage.formattedRemaining : '4.00 GB'} free
-                    </span>
+                {/* Storage Info Widget in Menu - Only shown for Admin */}
+                {isAdmin && (
+                  <div className="mt-3 p-3 rounded-2xl bg-slate-50/60 dark:bg-slate-900/60 border border-slate-200/50 dark:border-white/5">
+                    <div className="flex items-center justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <HardDrive className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+                        Vault Cloud Storage
+                      </span>
+                      <span className="font-semibold text-blue-600 dark:text-cyan-400 font-mono">
+                        {storageUsage ? storageUsage.formattedRemaining : '4.00 GB'} free
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-200/80 dark:bg-slate-700/60 rounded-full mt-2 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          isFull ? 'bg-rose-500' : isNearLimit ? 'bg-amber-500' : 'bg-gradient-to-r from-blue-500 to-cyan-400'
+                        }`}
+                        style={{ width: `${Math.max(4, usedPct)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-400 mt-1.5">
+                      {storageUsage ? storageUsage.formattedUsed : '0 B'} used of 4.00 GB quota
+                    </p>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-200/80 dark:bg-slate-700/60 rounded-full mt-2 overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        isFull ? 'bg-rose-500' : isNearLimit ? 'bg-amber-500' : 'bg-gradient-to-r from-blue-500 to-cyan-400'
-                      }`}
-                      style={{ width: `${Math.max(4, usedPct)}%` }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-400 mt-1.5">
-                    {storageUsage ? storageUsage.formattedUsed : '0 B'} used of 4.00 GB quota
-                  </p>
-                </div>
+                )}
 
                 {/* Action Items List */}
                 <div className="mt-3 space-y-1">

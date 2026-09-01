@@ -7,7 +7,7 @@ export interface StoredUserAccount extends UserAccount {
   createdAt?: string;
 }
 
-// Initial fallback system accounts with unique emails
+// Default fallback system accounts (used only if server initialization has never run)
 const INITIAL_ACCOUNTS: StoredUserAccount[] = [
   {
     username: 'admin',
@@ -27,14 +27,14 @@ const INITIAL_ACCOUNTS: StoredUserAccount[] = [
   }
 ];
 
-const STORAGE_KEY_USERS = 'techsupport_vault_users_v3';
+const STORAGE_KEY_USERS = 'techsupport_vault_users_v4';
 const STORAGE_KEY_AUTH = 'techsupport_authenticated';
 const STORAGE_KEY_CURRENT_USER = 'techsupport_auth_current_user';
 const STORAGE_KEY_CURRENT_ROLE = 'techsupport_auth_current_role';
 const STORAGE_KEY_ACTIVE_OTP = 'techsupport_active_otp_sessions';
 
 /**
- * Returns all registered accounts from local storage or fallback defaults
+ * Returns all registered accounts from local storage
  */
 export function getRegisteredAccounts(): StoredUserAccount[] {
   let accounts: StoredUserAccount[] = [];
@@ -43,16 +43,11 @@ export function getRegisteredAccounts(): StoredUserAccount[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        accounts = parsed;
+        return parsed;
       }
     }
   } catch (e) {
     console.warn('Could not read user accounts from localStorage:', e);
-  }
-
-  if (accounts.length === 0) {
-    accounts = [...INITIAL_ACCOUNTS];
-    saveRegisteredAccounts(accounts);
   }
 
   return accounts;
@@ -70,7 +65,7 @@ export function saveRegisteredAccounts(accounts: StoredUserAccount[]): void {
 }
 
 /**
- * Fetches user accounts from the persistent server backend
+ * Fetches user accounts from the persistent server backend (authoritative source of truth)
  */
 export async function fetchRegisteredAccounts(): Promise<StoredUserAccount[]> {
   try {
@@ -84,9 +79,13 @@ export async function fetchRegisteredAccounts(): Promise<StoredUserAccount[]> {
       }
     }
   } catch (err) {
-    // Normal for offline or static hosting environments
+    // Offline or network error
   }
-  return getRegisteredAccounts();
+  const cached = getRegisteredAccounts();
+  if (cached.length === 0) {
+    return INITIAL_ACCOUNTS;
+  }
+  return cached;
 }
 
 // Initial background sync
@@ -117,10 +116,138 @@ function setSessionState(username: string, role: UserRole) {
   }
 }
 
+const STORAGE_KEY_LOCKOUT = 'techsupport_auth_lockout_state_v2';
+
+export interface LockoutState {
+  failedAttempts: number;
+  lockedUntil: number | null;
+  lockoutTier: number;
+  remainingSeconds: number;
+  isLocked: boolean;
+}
+
+/**
+ * Reads the current client lockout state from localStorage
+ */
+export function getLockoutState(): LockoutState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_LOCKOUT);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const now = Date.now();
+      if (parsed.lockedUntil && parsed.lockedUntil > now) {
+        const remaining = Math.max(1, Math.ceil((parsed.lockedUntil - now) / 1000));
+        return {
+          failedAttempts: parsed.failedAttempts || 0,
+          lockedUntil: parsed.lockedUntil,
+          lockoutTier: parsed.lockoutTier || 1,
+          remainingSeconds: remaining,
+          isLocked: true,
+        };
+      }
+      // If timer has expired, keep the history of failures/tiers so next wrong attempt increments tier
+      return {
+        failedAttempts: parsed.failedAttempts || 0,
+        lockedUntil: null,
+        lockoutTier: parsed.lockoutTier || 0,
+        remainingSeconds: 0,
+        isLocked: false,
+      };
+    }
+  } catch (e) {
+    console.warn('Could not read lockout state:', e);
+  }
+  return {
+    failedAttempts: 0,
+    lockedUntil: null,
+    lockoutTier: 0,
+    remainingSeconds: 0,
+    isLocked: false,
+  };
+}
+
+/**
+ * Saves lockout state to localStorage
+ */
+export function saveLockoutState(state: Partial<LockoutState>): void {
+  try {
+    const current = getLockoutState();
+    const merged = { ...current, ...state };
+    localStorage.setItem(STORAGE_KEY_LOCKOUT, JSON.stringify(merged));
+  } catch (e) {
+    console.warn('Could not save lockout state:', e);
+  }
+}
+
+/**
+ * Resets lockout state completely upon successful authentication
+ */
+export function resetLockoutState(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY_LOCKOUT);
+  } catch (e) {
+    console.warn('Could not reset lockout state:', e);
+  }
+}
+
+/**
+ * Records a failed attempt and calculates progressive lockout
+ */
+export function recordFailedAttempt(serverData?: {
+  isLocked?: boolean;
+  lockedUntil?: number | null;
+  remainingSeconds?: number;
+  failedAttempts?: number;
+  lockoutTier?: number;
+}): LockoutState {
+  const current = getLockoutState();
+  const now = Date.now();
+
+  if (serverData && (serverData.lockedUntil !== undefined || serverData.failedAttempts !== undefined)) {
+    const isLocked = !!(serverData.isLocked || (serverData.lockedUntil && serverData.lockedUntil > now));
+    const lockedUntil = serverData.lockedUntil || (isLocked && serverData.remainingSeconds ? now + serverData.remainingSeconds * 1000 : null);
+    const state: LockoutState = {
+      failedAttempts: serverData.failedAttempts ?? (current.failedAttempts + 1),
+      lockedUntil,
+      lockoutTier: serverData.lockoutTier ?? (current.lockoutTier || 1),
+      remainingSeconds: serverData.remainingSeconds ?? (lockedUntil ? Math.max(1, Math.ceil((lockedUntil - now) / 1000)) : 0),
+      isLocked,
+    };
+    saveLockoutState(state);
+    return state;
+  }
+
+  // Client-side fallback calculation
+  const newAttempts = current.failedAttempts + 1;
+  let lockedUntil: number | null = null;
+  let newTier = current.lockoutTier;
+  let isLocked = false;
+  let remainingSeconds = 0;
+
+  if (newAttempts >= 5) {
+    newTier = newAttempts - 4; // 1 for 5th, 2 for 6th, etc.
+    const durationMinutes = Math.min(newTier, 30);
+    const durationSec = durationMinutes * 60;
+    lockedUntil = now + durationSec * 1000;
+    isLocked = true;
+    remainingSeconds = durationSec;
+  }
+
+  const newState: LockoutState = {
+    failedAttempts: newAttempts,
+    lockedUntil,
+    lockoutTier: newTier,
+    remainingSeconds,
+    isLocked,
+  };
+  saveLockoutState(newState);
+  return newState;
+}
+
 /**
  * Authenticates user credentials against both persistent backend and client storage.
  * Works seamlessly on smartphones, laptops, desktop browsers, and offline.
- * Supports login via either Username OR Email Address.
+ * Supports login via either Username OR Email Address with progressive timeout on failed attempts.
  */
 export async function authenticateUser(
   loginIdInput: string, 
@@ -129,11 +256,38 @@ export async function authenticateUser(
 ): Promise<{ 
   success: boolean; 
   user?: StoredUserAccount; 
-  error?: string 
+  error?: string;
+  isLocked?: boolean;
+  lockedUntil?: number | null;
+  remainingSeconds?: number;
+  failedAttempts?: number;
+  lockoutTier?: number;
 }> {
-  // Strip whitespace that mobile predictive text often appends
-  const trimmedId = (loginIdInput || '').trim();
-  const trimmedPass = (passwordInput || '').trim();
+  // 0. Check active client lockout
+  const activeLock = getLockoutState();
+  if (activeLock.isLocked && activeLock.remainingSeconds > 0) {
+    const mins = Math.floor(activeLock.remainingSeconds / 60);
+    const secs = activeLock.remainingSeconds % 60;
+    const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    return {
+      success: false,
+      isLocked: true,
+      lockedUntil: activeLock.lockedUntil,
+      remainingSeconds: activeLock.remainingSeconds,
+      failedAttempts: activeLock.failedAttempts,
+      lockoutTier: activeLock.lockoutTier,
+      error: `Security lockout active. Please wait ${timeStr} before trying again.`
+    };
+  }
+
+  // Strip whitespace, unicode spaces, and invisible mobile keystrokes
+  const sanitize = (val: string) =>
+    (val || '')
+      .replace(/[\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, ' ')
+      .trim();
+
+  const trimmedId = sanitize(loginIdInput);
+  const trimmedPass = sanitize(passwordInput);
 
   if (!trimmedId || !trimmedPass) {
     return { 
@@ -162,12 +316,14 @@ export async function authenticateUser(
 
       if (response.ok && data.success && data.user) {
         setSessionState(data.user.username, data.user.role);
+        resetLockoutState(); // Clean reset on success
 
         // Refresh local cache with latest server state
         fetchRegisteredAccounts().catch(() => {});
 
         return { 
           success: true, 
+          isLocked: false,
           user: {
             username: data.user.username,
             role: data.user.role,
@@ -178,10 +334,16 @@ export async function authenticateUser(
         };
       }
 
-      // Server is online and responded with an auth failure
+      // Server is online and responded with an auth failure or lockout
       if (!response.ok) {
+        const lockout = recordFailedAttempt(data);
         return {
           success: false,
+          isLocked: lockout.isLocked,
+          lockedUntil: lockout.lockedUntil,
+          remainingSeconds: lockout.remainingSeconds,
+          failedAttempts: lockout.failedAttempts,
+          lockoutTier: lockout.lockoutTier,
           error: data.error || (requireAdmin ? 'Invalid admin credentials.' : 'Invalid username or password.')
         };
       }
@@ -199,15 +361,33 @@ export async function authenticateUser(
 
   if (user && user.passwordHash === trimmedPass) {
     if (requireAdmin && user.role !== 'admin') {
-      return { success: false, error: 'Access denied. Administrator privileges required.' };
+      const lockout = recordFailedAttempt();
+      return { 
+        success: false, 
+        isLocked: lockout.isLocked,
+        lockedUntil: lockout.lockedUntil,
+        remainingSeconds: lockout.remainingSeconds,
+        failedAttempts: lockout.failedAttempts,
+        lockoutTier: lockout.lockoutTier,
+        error: 'Access denied. Administrator privileges required.' 
+      };
     }
     setSessionState(user.username, user.role);
-    return { success: true, user };
+    resetLockoutState();
+    return { success: true, isLocked: false, user };
   }
 
+  const lockout = recordFailedAttempt();
   return { 
     success: false, 
-    error: 'Invalid username/email or password. Please verify spelling and casing.' 
+    isLocked: lockout.isLocked,
+    lockedUntil: lockout.lockedUntil,
+    remainingSeconds: lockout.remainingSeconds,
+    failedAttempts: lockout.failedAttempts,
+    lockoutTier: lockout.lockoutTier,
+    error: lockout.isLocked
+      ? `Too many failed attempts (${lockout.failedAttempts}). Access locked for ${lockout.lockoutTier} minute${lockout.lockoutTier > 1 ? 's' : ''}.`
+      : `Invalid credentials. (${5 - lockout.failedAttempts} attempt${5 - lockout.failedAttempts === 1 ? '' : 's'} remaining before 1-minute lockout)` 
   };
 }
 

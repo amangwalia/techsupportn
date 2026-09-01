@@ -20,9 +20,15 @@ import {
   Cloud,
   Link as LinkIcon,
   HardDrive,
-  AlertTriangle
+  AlertTriangle,
+  Clock,
+  Zap,
+  Loader2,
+  ArrowUp,
+  XCircle,
+  Ban
 } from 'lucide-react';
-import { ResourceItem, ResourceCategory, OperatingSystem, FileFormat, StorageUsageInfo } from '../types';
+import { ResourceItem, ResourceCategory, OperatingSystem, FileFormat, StorageUsageInfo, UploadProgressInfo } from '../types';
 import { saveUserUploadedResource, fetchStorageUsage, MAX_STORAGE_BYTES, formatByteSize } from '../utils/storage';
 import { parseGoogleDriveUrl } from '../utils/downloader';
 
@@ -70,9 +76,21 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
   const [approxSize, setApproxSize] = useState('15 MB');
 
   const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
   const [showCodePreview, setShowCodePreview] = useState(false);
+  const cancelUploadRef = useRef<(() => void) | null>(null);
+
+  const handleCancelUpload = () => {
+    if (cancelUploadRef.current) {
+      cancelUploadRef.current();
+      cancelUploadRef.current = null;
+    }
+    setSaving(false);
+    setUploadProgress(null);
+    setErrorMsg('Upload was cancelled.');
+  };
 
   // Fetch updated storage usage on modal mount
   useEffect(() => {
@@ -360,6 +378,20 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
     setSaving(true);
     setErrorMsg('');
 
+    const initialTotal = selectedFile ? selectedFile.size : 1024;
+    setUploadProgress({
+      loaded: 0,
+      total: initialTotal,
+      percentage: 0,
+      speedBytesPerSec: 0,
+      formattedLoaded: '0 B',
+      formattedTotal: selectedFile ? formatByteSize(selectedFile.size) : approxSize,
+      formattedSpeed: 'Connecting...',
+      timeRemainingSeconds: 0,
+      formattedTimeRemaining: 'Starting upload...',
+      status: 'uploading'
+    });
+
     try {
       const tags = tagsInput
         .split(',')
@@ -408,8 +440,23 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
         ]
       };
 
-      // Save to Central Server
-      const result = await saveUserUploadedResource(newResource, selectedFile || undefined);
+      // Save to Central Server with live upload progress tracking and cancellation handle
+      const result = await saveUserUploadedResource(
+        newResource, 
+        selectedFile || undefined,
+        (progress) => {
+          setUploadProgress(progress);
+        },
+        cancelUploadRef
+      );
+
+      if (result.isCancelled) {
+        setSaving(false);
+        setUploadProgress(null);
+        setErrorMsg('Upload was cancelled.');
+        return;
+      }
+
       if (!result.success || !result.resource) {
         throw new Error(result.error || 'Failed to save to central server storage');
       }
@@ -422,6 +469,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
       setErrorMsg(err.message || 'An error occurred while uploading. Please try again.');
     } finally {
       setSaving(false);
+      setUploadProgress(null);
     }
   };
 
@@ -447,8 +495,9 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={saving ? handleCancelUpload : onClose}
             className="p-1.5 rounded-full liquid-glass-chip hover:bg-white/80 dark:hover:bg-slate-800/80 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition cursor-pointer"
+            title={saving ? 'Cancel upload and close' : 'Close'}
           >
             <X className="w-5 h-5" />
           </button>
@@ -921,40 +970,164 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
             </p>
           </div>
 
+          {/* Real-time Upload Progress Live Indicator Card */}
+          {saving && uploadProgress && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-cyan-500/10 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-cyan-950/40 border border-blue-200 dark:border-blue-800/80 shadow-lg space-y-3.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {/* Progress Header */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/30 shrink-0">
+                    <ArrowUp className="w-5 h-5 animate-bounce" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                        {uploadProgress.status === 'processing'
+                          ? 'Processing & Indexing on Server...'
+                          : uploadProgress.percentage >= 100
+                          ? 'Upload Finalizing...'
+                          : 'Uploading Resource...'}
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-md bg-blue-600/15 text-blue-700 dark:text-blue-300 text-[11px] font-mono font-bold">
+                        {uploadProgress.percentage}%
+                      </span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-zinc-600 dark:text-zinc-400 truncate max-w-xs sm:max-w-md font-mono">
+                      {selectedFile?.name || title || 'Resource Payload'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight">
+                    {uploadProgress.percentage}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCancelUpload}
+                    className="px-2.5 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-300/50 dark:border-rose-800/60 text-xs font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                    title="Cancel active file upload"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Cancel</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Live Multi-Gradient Progress Bar */}
+              <div className="space-y-1">
+                <div className="relative w-full h-3 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden p-0.5 border border-zinc-300/60 dark:border-zinc-700/60">
+                  <div 
+                    className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-400 transition-all duration-200 ease-out relative overflow-hidden shadow-xs"
+                    style={{ width: `${Math.max(3, uploadProgress.percentage)}%` }}
+                  >
+                    <div className="absolute inset-0 bg-white/25 animate-pulse" />
+                  </div>
+                </div>
+                <div className="flex justify-between text-[10px] text-zinc-500 dark:text-zinc-400 font-mono font-medium px-0.5">
+                  <span>0%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+
+              {/* 3 Real-time Metric Indicators */}
+              <div className="grid grid-cols-3 gap-2 pt-0.5">
+                {/* 1. Uploaded Amount */}
+                <div className="p-2 sm:p-2.5 rounded-xl bg-white/90 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 font-medium mb-0.5">
+                    <HardDrive className="w-3 h-3 text-blue-500 shrink-0" />
+                    <span>Uploaded</span>
+                  </div>
+                  <div className="text-[11px] sm:text-xs font-bold text-zinc-900 dark:text-zinc-100 font-mono truncate">
+                    {uploadProgress.formattedLoaded} <span className="text-zinc-500 dark:text-zinc-400 font-normal">/ {uploadProgress.formattedTotal}</span>
+                  </div>
+                </div>
+
+                {/* 2. Upload Speed */}
+                <div className="p-2 sm:p-2.5 rounded-xl bg-white/90 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 font-medium mb-0.5">
+                    <Zap className="w-3 h-3 text-amber-500 shrink-0" />
+                    <span>Speed</span>
+                  </div>
+                  <div className="text-[11px] sm:text-xs font-bold text-zinc-900 dark:text-zinc-100 font-mono truncate">
+                    {uploadProgress.formattedSpeed}
+                  </div>
+                </div>
+
+                {/* 3. Time Remaining */}
+                <div className="p-2 sm:p-2.5 rounded-xl bg-white/90 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 font-medium mb-0.5">
+                    <Clock className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span>Time Left</span>
+                  </div>
+                  <div className="text-[11px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono truncate">
+                    {uploadProgress.formattedTimeRemaining}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Submit Button */}
           <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={handleCopyCode}
-              className="px-3.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5"
+              disabled={saving}
+              className={`px-3.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                saving ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''
+              }`}
             >
               {copiedCode ? <CheckCircle2 className="w-4 h-4 text-blue-500" /> : <Copy className="w-4 h-4" />}
               <span>{copiedCode ? 'Code Copied' : 'Copy Code for AI'}</span>
             </button>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs sm:text-sm font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
-              >
-                Cancel
-              </button>
+              {saving ? (
+                <button
+                  type="button"
+                  onClick={handleCancelUpload}
+                  className="px-4 py-2 rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs sm:text-sm font-bold hover:bg-rose-100 dark:hover:bg-rose-900/60 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Ban className="w-4 h-4 text-rose-500" />
+                  <span>Cancel Upload</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs sm:text-sm font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={saving || (uploadMode === 'file' && isOverQuota)}
                 className={`px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-bold shadow-md shadow-blue-600/25 transition cursor-pointer flex items-center gap-2 ${
-                  saving || (uploadMode === 'file' && isOverQuota) ? 'opacity-50 cursor-not-allowed' : ''
+                  saving || (uploadMode === 'file' && isOverQuota) ? 'opacity-70 cursor-not-allowed' : ''
                 }`}
               >
-                <Upload className="w-4 h-4" />
-                <span>
-                  {saving 
-                    ? 'Publishing...' 
-                    : uploadMode === 'file' && isOverQuota 
-                      ? 'Quota Exceeded' 
-                      : 'Publish to Catalog'}
-                </span>
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>
+                      {uploadProgress 
+                        ? `Uploading ${uploadProgress.percentage}% • ${uploadProgress.formattedTimeRemaining}`
+                        : 'Publishing...'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>
+                      {uploadMode === 'file' && isOverQuota 
+                        ? 'Quota Exceeded' 
+                        : 'Publish to Catalog'}
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>

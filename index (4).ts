@@ -120,3 +120,16 @@ export interface UserAccount {
   avatarColor?: string;
 }
 
+export interface UploadProgressInfo {
+  loaded: number;
+  total: number;
+  percentage: number;
+  speedBytesPerSec: number;
+  formattedLoaded: string;
+  formattedTotal: string;
+  formattedSpeed: string;
+  timeRemainingSeconds: number;
+  formattedTimeRemaining: string;
+  status: 'preparing' | 'uploading' | 'processing' | 'completed' | 'cancelled' | 'error';
+}
+

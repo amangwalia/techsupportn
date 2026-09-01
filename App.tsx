@@ -434,25 +434,27 @@ export default function App() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto shrink-0">
-            {/* Storage capacity info glass card */}
-            <div className="px-4 py-2.5 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-white/70 dark:border-white/10 shadow-xs flex flex-col justify-center min-w-[180px] backdrop-blur-md">
-              <div className="flex items-center justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                <span>Cloud Storage:</span>
-                <span className="font-semibold text-blue-600 dark:text-cyan-400 font-mono">
-                  {storageUsage ? storageUsage.formattedRemaining : '4.00 GB'} left
-                </span>
+            {/* Storage capacity info glass card - Only shown for Admin */}
+            {isAdmin && (
+              <div className="px-4 py-2.5 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-white/70 dark:border-white/10 shadow-xs flex flex-col justify-center min-w-[180px] backdrop-blur-md">
+                <div className="flex items-center justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                  <span>Cloud Storage:</span>
+                  <span className="font-semibold text-blue-600 dark:text-cyan-400 font-mono">
+                    {storageUsage ? storageUsage.formattedRemaining : '4.00 GB'} left
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-200/70 dark:bg-slate-700/60 rounded-full mt-2 overflow-hidden shadow-inner">
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.max(4, storageUsage ? storageUsage.usedPercentage : 0)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 font-mono">
+                  <span>Used: {storageUsage ? storageUsage.formattedUsed : '0 B'}</span>
+                  <span>Max: 4.00 GB</span>
+                </div>
               </div>
-              <div className="w-full h-1.5 bg-slate-200/70 dark:bg-slate-700/60 rounded-full mt-2 overflow-hidden shadow-inner">
-                <div 
-                  className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.max(4, storageUsage ? storageUsage.usedPercentage : 0)}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 font-mono">
-                <span>Used: {storageUsage ? storageUsage.formattedUsed : '0 B'}</span>
-                <span>Max: 4.00 GB</span>
-              </div>
-            </div>
+            )}
 
             {isAdmin ? (
               <button

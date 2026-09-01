@@ -421,7 +421,7 @@ apiRouter.post("/resources/upload", upload.single("file"), async (req: Request, 
   }
 });
 
-// 4. Download file handler
+// 4. Download file handler with enhanced mobile/APK binary streaming
 const handleFileDownload = (req: Request, res: Response) => {
   const { id } = req.params;
   const decodedId = decodeURIComponent(id || "");
@@ -441,8 +441,21 @@ const handleFileDownload = (req: Request, res: Response) => {
     // Check if directly a filename in uploads dir
     const directPath = path.join(UPLOADS_DIR, decodedId);
     if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
+      const isApk = decodedId.toLowerCase().endsWith('.apk');
+      const cleanMime = isApk ? 'application/vnd.android.package-archive' : 'application/octet-stream';
+      const stat = fs.statSync(directPath);
       res.setHeader("Access-Control-Allow-Origin", "*");
-      return res.download(directPath, decodedId);
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, Content-Type");
+      res.setHeader("Content-Type", cleanMime);
+      res.setHeader("Content-Length", stat.size.toString());
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("Content-Disposition", `attachment; filename="${decodedId}"; filename*=UTF-8''${encodeURIComponent(decodedId)}`);
+      
+      if (req.method === 'HEAD') {
+        return res.status(200).end();
+      }
+      return fs.createReadStream(directPath).pipe(res);
     }
     return res.status(404).send("File not found.");
   }
@@ -472,18 +485,44 @@ const handleFileDownload = (req: Request, res: Response) => {
       item.downloadCount = (item.downloadCount || 0) + 1;
       writeResourcesMetadata(items);
 
-      const downloadName = item.fileName || "download";
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
-      if (item.mimeType) {
-        res.setHeader("Content-Type", item.mimeType);
+      const downloadName = (item.fileName || path.basename(filePath) || "download.bin").replace(/["\r\n]/g, "");
+      const isApk = (item.format && item.format.toUpperCase() === 'APK') ||
+                    downloadName.toLowerCase().endsWith('.apk') ||
+                    filePath.toLowerCase().endsWith('.apk');
+
+      let mimeType = item.mimeType;
+      if (isApk) {
+        mimeType = 'application/vnd.android.package-archive';
+      } else if (!mimeType || mimeType === 'application/octet-stream') {
+        if (downloadName.endsWith('.exe')) mimeType = 'application/x-msdownload';
+        else if (downloadName.endsWith('.msi')) mimeType = 'application/x-msi';
+        else if (downloadName.endsWith('.zip')) mimeType = 'application/zip';
+        else if (downloadName.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (downloadName.endsWith('.mp4')) mimeType = 'video/mp4';
+        else mimeType = 'application/octet-stream';
       }
-      return res.download(filePath, downloadName, (err) => {
-        if (err && !res.headersSent) {
-          console.error("Error during res.download:", err);
-          res.status(500).send("Error streaming file.");
+
+      const stat = fs.statSync(filePath);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, Content-Type");
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Length", stat.size.toString());
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
+
+      if (req.method === 'HEAD') {
+        return res.status(200).end();
+      }
+
+      const stream = fs.createReadStream(filePath);
+      stream.on('error', (err) => {
+        if (!res.headersSent) {
+          console.error("Stream error:", err);
+          res.status(500).send("Error streaming binary payload.");
         }
       });
+      return stream.pipe(res);
     }
   }
 
@@ -491,9 +530,9 @@ const handleFileDownload = (req: Request, res: Response) => {
   if (item.rawContent) {
     item.downloadCount = (item.downloadCount || 0) + 1;
     writeResourcesMetadata(items);
-    const downloadName = item.fileName || `${item.id}.txt`;
+    const downloadName = (item.fileName || `${item.id}.txt`).replace(/["\r\n]/g, "");
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
     res.setHeader("Content-Type", item.mimeType || "text/plain; charset=utf-8");
     return res.send(item.rawContent);
   }
@@ -502,7 +541,9 @@ const handleFileDownload = (req: Request, res: Response) => {
 };
 
 apiRouter.get("/resources/file/:id", handleFileDownload);
+apiRouter.head("/resources/file/:id", handleFileDownload);
 apiRouter.get("/resources/download/:id", handleFileDownload);
+apiRouter.head("/resources/download/:id", handleFileDownload);
 
 // 5. Media streaming preview
 apiRouter.get("/resources/media/:id", (req: Request, res: Response) => {
@@ -577,17 +618,76 @@ apiRouter.post("/resources/:id/download-count", (req: Request, res: Response) =>
   res.status(404).json({ error: "Not found" });
 });
 
-// 8. User Authentication & Login
+// 8. Rate Limiting & Failed Login Lockout Tracker
+interface LoginAttemptState {
+  failedAttempts: number;
+  lockoutTier: number;
+  lockedUntil: number | null;
+  lastAttemptAt: number;
+}
+
+const loginAttemptsMap = new Map<string, LoginAttemptState>();
+
+// Periodically clean up stale login attempt entries (older than 2 hours)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, state] of loginAttemptsMap.entries()) {
+    if (now - state.lastAttemptAt > 2 * 60 * 60 * 1000 && (!state.lockedUntil || state.lockedUntil < now)) {
+      loginAttemptsMap.delete(key);
+    }
+  }
+}, 10 * 60 * 1000);
+
+function getClientIdentifier(req: Request, loginId: string): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  const ip = typeof forwarded === "string" ? forwarded.split(",")[0].trim() : req.socket?.remoteAddress || "client";
+  const idKey = (loginId || "unknown").trim().toLowerCase();
+  return `${ip}::${idKey}`;
+}
+
+// 9. User Authentication & Login with failed attempt progressive lockout
 apiRouter.post("/auth/login", (req: Request, res: Response) => {
   try {
     const { loginId, password, requireAdmin } = req.body || {};
-    const trimmedId = (loginId || "").trim().toLowerCase();
-    const trimmedPass = (password || "").trim();
+    
+    // Normalize Unicode spaces, invisible chars, and mobile keyboard artifacts
+    const sanitize = (val: string) =>
+      (val || "")
+        .replace(/[\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, " ")
+        .trim();
+
+    const trimmedId = sanitize(loginId).toLowerCase();
+    const trimmedPass = sanitize(password);
 
     if (!trimmedId || !trimmedPass) {
       return res.status(400).json({
         success: false,
         error: "Please enter your username/email and password.",
+      });
+    }
+
+    const clientKey = getClientIdentifier(req, trimmedId);
+    let attemptState = loginAttemptsMap.get(clientKey);
+
+    const now = Date.now();
+
+    // Check if client is currently in active lockout
+    if (attemptState && attemptState.lockedUntil && attemptState.lockedUntil > now) {
+      const remainingSeconds = Math.max(1, Math.ceil((attemptState.lockedUntil - now) / 1000));
+      const remainingMins = Math.floor(remainingSeconds / 60);
+      const remainingSecs = remainingSeconds % 60;
+      const formattedTime = remainingMins > 0 
+        ? `${remainingMins}m ${remainingSecs}s`
+        : `${remainingSecs}s`;
+
+      return res.status(429).json({
+        success: false,
+        isLocked: true,
+        lockedUntil: attemptState.lockedUntil,
+        remainingSeconds,
+        failedAttempts: attemptState.failedAttempts,
+        lockoutTier: attemptState.lockoutTier,
+        error: `Security lockout active. Please wait ${formattedTime} before trying again.`,
       });
     }
 
@@ -598,15 +698,75 @@ apiRouter.post("/auth/login", (req: Request, res: Response) => {
         (u.email && u.email.toLowerCase() === trimmedId)
     );
 
-    if (!user || user.passwordHash !== trimmedPass) {
+    const recordFailure = (baseError: string) => {
+      if (!attemptState) {
+        attemptState = {
+          failedAttempts: 0,
+          lockoutTier: 0,
+          lockedUntil: null,
+          lastAttemptAt: now,
+        };
+        loginAttemptsMap.set(clientKey, attemptState);
+      }
+
+      attemptState.failedAttempts += 1;
+      attemptState.lastAttemptAt = now;
+
+      // When reaching 5 failed attempts or more, enforce progressive lockout
+      if (attemptState.failedAttempts >= 5) {
+        // Tier 1 (5th fail) = 1 minute (60s)
+        // Tier 2 (6th fail) = 2 minutes (120s)
+        // Tier 3 (7th fail) = 3 minutes (180s), etc.
+        const tier = attemptState.failedAttempts - 4;
+        const durationMinutes = Math.min(tier, 30); // Cap at 30 min max
+        const durationSeconds = durationMinutes * 60;
+
+        attemptState.lockoutTier = tier;
+        attemptState.lockedUntil = now + durationSeconds * 1000;
+
+        return res.status(429).json({
+          success: false,
+          isLocked: true,
+          lockedUntil: attemptState.lockedUntil,
+          remainingSeconds: durationSeconds,
+          failedAttempts: attemptState.failedAttempts,
+          lockoutTier: tier,
+          lockDurationMinutes: durationMinutes,
+          error: `Too many failed attempts (${attemptState.failedAttempts}). Access locked for ${durationMinutes} minute${durationMinutes > 1 ? "s" : ""}. Please wait for the timer to expire.`,
+        });
+      }
+
+      const remainingAttempts = 5 - attemptState.failedAttempts;
       return res.status(401).json({
         success: false,
-        error: "Invalid username or password. Please verify spelling and casing.",
+        isLocked: false,
+        failedAttempts: attemptState.failedAttempts,
+        remainingAttempts,
+        error: `${baseError} (${remainingAttempts} attempt${remainingAttempts === 1 ? "" : "s"} remaining before 1-minute lockout)`,
       });
+    };
+
+    if (!user) {
+      return recordFailure(`Account "${trimmedId}" not found. Please check your username or email.`);
     }
+
+    // Password comparison: exact match with stored password
+    const passwordMatch = user.passwordHash === trimmedPass;
+
+    if (!passwordMatch) {
+      return recordFailure("Incorrect password. Please verify your password.");
+    }
+
+    if (requireAdmin && user.role !== "admin") {
+      return recordFailure(`User "${user.username}" is a Member. Administrator privileges are required on the Admin portal.`);
+    }
+
+    // Login successful: reset failed attempt counter and remove lockout
+    loginAttemptsMap.delete(clientKey);
 
     return res.json({
       success: true,
+      isLocked: false,
       user: {
         username: user.username,
         role: user.role,
